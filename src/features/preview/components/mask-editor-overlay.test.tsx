@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, waitFor } from '@testing-library/react';
-import { useItemsStore, useTimelineSettingsStore } from '@/features/preview/deps/timeline-store';
+import { useItemsStore, useTimelineSettingsStore, useTimelineStore, useTransitionsStore } from '@/features/preview/deps/timeline-store';
 import { useMaskEditorStore } from '../stores/mask-editor-store';
 import { useGizmoStore } from '../stores/gizmo-store';
 import { MaskEditorOverlay } from './mask-editor-overlay';
@@ -66,6 +66,8 @@ function resetStores() {
   useMaskEditorStore.getState().stopEditing();
   useGizmoStore.getState().clearInteraction();
   useGizmoStore.getState().clearPreview();
+  useTimelineStore.setState({ keyframes: [] });
+  useTransitionsStore.getState().setTransitions([]);
   useItemsStore.getState().setItems([]);
   useItemsStore.getState().setTracks([
     {
@@ -1073,6 +1075,345 @@ describe('MaskEditorOverlay edit mode', () => {
       { position: [0, 1], inHandle: [0, 0], outHandle: [0, 0] },
     ]);
     expect(useMaskEditorStore.getState().selectedVertexIndices).toEqual([0, 1, 2, 3]);
+  });
+
+  it('updates current-frame transform keyframes instead of baking animated bounds into the base mask transform', () => {
+    const animatedTransform: Transform = {
+      x: 30,
+      y: 10,
+      width: 120,
+      height: 80,
+      rotation: 0,
+      opacity: 1,
+      cornerRadius: 0,
+    };
+
+    useItemsStore.getState().setItems([
+      {
+        id: 'path-1',
+        type: 'shape',
+        trackId: 'track-1',
+        from: 0,
+        durationInFrames: 90,
+        label: 'Mask',
+        shapeType: 'path',
+        fillColor: '#ffffff',
+        isMask: true,
+        pathVertices: [
+          { position: [0, 0], inHandle: [0, 0], outHandle: [0, 0] },
+          { position: [1, 0.5], inHandle: [0, 0], outHandle: [0, 0] },
+          { position: [0.25, 1], inHandle: [0, 0], outHandle: [0, 0] },
+        ],
+        transform: {
+          x: 10,
+          y: 5,
+          width: 100,
+          height: 60,
+          rotation: 0,
+          opacity: 1,
+          cornerRadius: 0,
+        },
+      },
+    ]);
+    useTimelineStore.setState({
+      keyframes: [
+        {
+          itemId: 'path-1',
+          properties: [
+            { property: 'x', keyframes: [{ id: 'x-kf', frame: 15, value: 30, easing: 'linear' }] },
+            { property: 'y', keyframes: [{ id: 'y-kf', frame: 15, value: 10, easing: 'linear' }] },
+            { property: 'width', keyframes: [{ id: 'width-kf', frame: 15, value: 120, easing: 'linear' }] },
+            { property: 'height', keyframes: [{ id: 'height-kf', frame: 15, value: 80, easing: 'linear' }] },
+          ],
+        },
+      ],
+    });
+    usePlaybackStore.getState().setCurrentFrame(15);
+    useMaskEditorStore.getState().startEditing('path-1');
+
+    const coordParams: CoordinateParams = {
+      containerRect: createRect(),
+      playerSize: PLAYER_SIZE,
+      projectSize: PROJECT_SIZE,
+      zoom: 1,
+    };
+
+    const { container } = render(
+      <MaskEditorOverlay
+        coordParams={coordParams}
+        playerSize={PLAYER_SIZE}
+        itemTransform={animatedTransform}
+      />
+    );
+
+    const canvas = container.querySelector('canvas');
+    expect(canvas).toBeTruthy();
+
+    vi.spyOn(canvas!, 'getBoundingClientRect').mockReturnValue(createRect());
+
+    fireEvent.pointerDown(canvas!, { clientX: 70, clientY: 30, pointerId: 1 });
+    fireEvent.pointerMove(canvas!, { clientX: 82, clientY: 38, pointerId: 1 });
+    fireEvent.pointerUp(canvas!, { clientX: 82, clientY: 38, pointerId: 1 });
+
+    const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+    expect(updatedItem?.transform?.x).toBeCloseTo(10);
+    expect(updatedItem?.transform?.y).toBeCloseTo(5);
+    expect(updatedItem?.transform?.width).toBeCloseTo(100);
+    expect(updatedItem?.transform?.height).toBeCloseTo(60);
+
+    const updatedKeyframes = useTimelineStore.getState().keyframes.find((entry) => entry.itemId === 'path-1');
+    const xKeyframe = updatedKeyframes?.properties.find((property) => property.property === 'x')?.keyframes[0];
+    const yKeyframe = updatedKeyframes?.properties.find((property) => property.property === 'y')?.keyframes[0];
+    const widthKeyframe = updatedKeyframes?.properties.find((property) => property.property === 'width')?.keyframes[0];
+    const heightKeyframe = updatedKeyframes?.properties.find((property) => property.property === 'height')?.keyframes[0];
+
+    expect(xKeyframe?.value).toBeCloseTo(36);
+    expect(yKeyframe?.value).toBeCloseTo(14);
+    expect(widthKeyframe?.value).toBeCloseTo(108);
+    expect(heightKeyframe?.value).toBeCloseTo(72);
+  });
+
+  it('adds current-frame transform keyframes for animated mask point edits between existing keys', () => {
+    const animatedTransform: Transform = {
+      x: 30,
+      y: 10,
+      width: 120,
+      height: 80,
+      rotation: 0,
+      opacity: 1,
+      cornerRadius: 0,
+    };
+
+    useItemsStore.getState().setItems([
+      {
+        id: 'path-1',
+        type: 'shape',
+        trackId: 'track-1',
+        from: 0,
+        durationInFrames: 90,
+        label: 'Mask',
+        shapeType: 'path',
+        fillColor: '#ffffff',
+        isMask: true,
+        pathVertices: [
+          { position: [0, 0], inHandle: [0, 0], outHandle: [0, 0] },
+          { position: [1, 0.5], inHandle: [0, 0], outHandle: [0, 0] },
+          { position: [0.25, 1], inHandle: [0, 0], outHandle: [0, 0] },
+        ],
+        transform: {
+          x: 10,
+          y: 5,
+          width: 100,
+          height: 60,
+          rotation: 0,
+          opacity: 1,
+          cornerRadius: 0,
+        },
+      },
+    ]);
+    useTimelineStore.setState({
+      keyframes: [
+        {
+          itemId: 'path-1',
+          properties: [
+            {
+              property: 'x',
+              keyframes: [
+                { id: 'x-kf-1', frame: 0, value: 10, easing: 'linear' },
+                { id: 'x-kf-2', frame: 30, value: 50, easing: 'linear' },
+              ],
+            },
+            {
+              property: 'y',
+              keyframes: [
+                { id: 'y-kf-1', frame: 0, value: 5, easing: 'linear' },
+                { id: 'y-kf-2', frame: 30, value: 15, easing: 'linear' },
+              ],
+            },
+            {
+              property: 'width',
+              keyframes: [
+                { id: 'width-kf-1', frame: 0, value: 100, easing: 'linear' },
+                { id: 'width-kf-2', frame: 30, value: 140, easing: 'linear' },
+              ],
+            },
+            {
+              property: 'height',
+              keyframes: [
+                { id: 'height-kf-1', frame: 0, value: 60, easing: 'linear' },
+                { id: 'height-kf-2', frame: 30, value: 100, easing: 'linear' },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    usePlaybackStore.getState().setCurrentFrame(15);
+    useMaskEditorStore.getState().startEditing('path-1');
+
+    const coordParams: CoordinateParams = {
+      containerRect: createRect(),
+      playerSize: PLAYER_SIZE,
+      projectSize: PROJECT_SIZE,
+      zoom: 1,
+    };
+
+    const { container } = render(
+      <MaskEditorOverlay
+        coordParams={coordParams}
+        playerSize={PLAYER_SIZE}
+        itemTransform={animatedTransform}
+      />
+    );
+
+    const canvas = container.querySelector('canvas');
+    expect(canvas).toBeTruthy();
+
+    vi.spyOn(canvas!, 'getBoundingClientRect').mockReturnValue(createRect());
+
+    fireEvent.pointerDown(canvas!, { clientX: 70, clientY: 30, pointerId: 1 });
+    fireEvent.pointerMove(canvas!, { clientX: 82, clientY: 38, pointerId: 1 });
+    fireEvent.pointerUp(canvas!, { clientX: 82, clientY: 38, pointerId: 1 });
+
+    const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+    expect(updatedItem?.transform?.x).toBeCloseTo(10);
+    expect(updatedItem?.transform?.y).toBeCloseTo(5);
+    expect(updatedItem?.transform?.width).toBeCloseTo(100);
+    expect(updatedItem?.transform?.height).toBeCloseTo(60);
+
+    const updatedKeyframes = useTimelineStore.getState().keyframes.find((entry) => entry.itemId === 'path-1');
+    const xKeyframes = updatedKeyframes?.properties.find((property) => property.property === 'x')?.keyframes ?? [];
+    const yKeyframes = updatedKeyframes?.properties.find((property) => property.property === 'y')?.keyframes ?? [];
+    const widthKeyframes = updatedKeyframes?.properties.find((property) => property.property === 'width')?.keyframes ?? [];
+    const heightKeyframes = updatedKeyframes?.properties.find((property) => property.property === 'height')?.keyframes ?? [];
+
+    expect(xKeyframes).toHaveLength(3);
+    expect(yKeyframes).toHaveLength(3);
+    expect(widthKeyframes).toHaveLength(3);
+    expect(heightKeyframes).toHaveLength(3);
+
+    expect(xKeyframes.find((keyframe) => keyframe.frame === 15)?.value).toBeCloseTo(36);
+    expect(yKeyframes.find((keyframe) => keyframe.frame === 15)?.value).toBeCloseTo(14);
+    expect(widthKeyframes.find((keyframe) => keyframe.frame === 15)?.value).toBeCloseTo(108);
+    expect(heightKeyframes.find((keyframe) => keyframe.frame === 15)?.value).toBeCloseTo(72);
+  });
+
+  it('falls back to base transform when frame is in a transition region and keyframe add is blocked', () => {
+    const animatedTransform: Transform = {
+      x: 30,
+      y: 10,
+      width: 120,
+      height: 80,
+      rotation: 0,
+      opacity: 1,
+      cornerRadius: 0,
+    };
+
+    useItemsStore.getState().setItems([
+      {
+        id: 'left-clip',
+        type: 'shape',
+        trackId: 'track-1',
+        from: 0,
+        durationInFrames: 30,
+        label: 'Left',
+        shapeType: 'rectangle',
+        fillColor: '#000000',
+        transform: { x: 0, y: 0, width: 200, height: 120, rotation: 0, opacity: 1, cornerRadius: 0 },
+      },
+      {
+        id: 'path-1',
+        type: 'shape',
+        trackId: 'track-1',
+        from: 20,
+        durationInFrames: 60,
+        label: 'Mask',
+        shapeType: 'path',
+        fillColor: '#ffffff',
+        isMask: true,
+        pathVertices: [
+          { position: [0, 0], inHandle: [0, 0], outHandle: [0, 0] },
+          { position: [1, 0.5], inHandle: [0, 0], outHandle: [0, 0] },
+          { position: [0.25, 1], inHandle: [0, 0], outHandle: [0, 0] },
+        ],
+        transform: {
+          x: 10,
+          y: 5,
+          width: 100,
+          height: 60,
+          rotation: 0,
+          opacity: 1,
+          cornerRadius: 0,
+        },
+      },
+    ]);
+
+    // Transition covering frames 0-10 of path-1 (incoming clip)
+    useTransitionsStore.getState().setTransitions([
+      {
+        id: 'trans-1',
+        type: 'crossfade',
+        presentation: 'fade',
+        timing: 'linear',
+        leftClipId: 'left-clip',
+        rightClipId: 'path-1',
+        trackId: 'track-1',
+        durationInFrames: 10,
+        alignment: 0,
+      },
+    ]);
+
+    useTimelineStore.setState({
+      keyframes: [
+        {
+          itemId: 'path-1',
+          properties: [
+            { property: 'x', keyframes: [{ id: 'x-kf', frame: 30, value: 50, easing: 'linear' }] },
+            { property: 'y', keyframes: [{ id: 'y-kf', frame: 30, value: 20, easing: 'linear' }] },
+            { property: 'width', keyframes: [{ id: 'w-kf', frame: 30, value: 140, easing: 'linear' }] },
+            { property: 'height', keyframes: [{ id: 'h-kf', frame: 30, value: 100, easing: 'linear' }] },
+          ],
+        },
+      ],
+    });
+
+    // Frame 25 in project = frame 5 in item (inside transition region)
+    usePlaybackStore.getState().setCurrentFrame(25);
+    useMaskEditorStore.getState().startEditing('path-1');
+
+    const coordParams: CoordinateParams = {
+      containerRect: createRect(),
+      playerSize: PLAYER_SIZE,
+      projectSize: PROJECT_SIZE,
+      zoom: 1,
+    };
+
+    const { container } = render(
+      <MaskEditorOverlay
+        coordParams={coordParams}
+        playerSize={PLAYER_SIZE}
+        itemTransform={animatedTransform}
+      />
+    );
+
+    const canvas = container.querySelector('canvas');
+    expect(canvas).toBeTruthy();
+    vi.spyOn(canvas!, 'getBoundingClientRect').mockReturnValue(createRect());
+
+    fireEvent.pointerDown(canvas!, { clientX: 70, clientY: 30, pointerId: 1 });
+    fireEvent.pointerMove(canvas!, { clientX: 82, clientY: 38, pointerId: 1 });
+    fireEvent.pointerUp(canvas!, { clientX: 82, clientY: 38, pointerId: 1 });
+
+    const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+
+    // The edit should fall through to base transform since keyframe add is blocked
+    expect(updatedItem?.transform?.x).not.toBeCloseTo(10);
+    expect(updatedItem?.transform?.y).not.toBeCloseTo(5);
+
+    // Keyframe count should NOT have increased — no new keyframes in transition region
+    const updatedKeyframes = useTimelineStore.getState().keyframes.find((entry) => entry.itemId === 'path-1');
+    const xKeyframes = updatedKeyframes?.properties.find((property) => property.property === 'x')?.keyframes ?? [];
+    expect(xKeyframes).toHaveLength(1);
   });
 
   it('keeps the current multi-selection while dragging a selected point', () => {
