@@ -1,6 +1,6 @@
 import type React from 'react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import type { TimelineItem } from '@/types/timeline';
+import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import type { DragState, UseTimelineDragReturn, SnapTarget } from '../types/drag';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
@@ -9,7 +9,11 @@ import { useSnapCalculator } from './use-snap-calculator';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { getTrackKind } from '../utils/classic-tracks';
 import { expandSelectionWithLinkedItems, getLinkedItemIds } from '../utils/linked-items';
-import { resolveLinkedDragTrackTargets, type LinkedDragDropZone } from '../utils/linked-drag-targeting';
+import {
+  resolveCreateNewDragTrackTargets,
+  resolveLinkedDragTrackTargets,
+  type LinkedDragDropZone,
+} from '../utils/linked-drag-targeting';
 import { DRAG_THRESHOLD_PIXELS } from '../constants';
 import { createLogger } from '@/shared/logging/logger';
 
@@ -57,6 +61,73 @@ function getDraggedLinkedPair(items: TimelineItem[], draggedItemIds: string[]): 
   return {
     videoItemId: videoItem.id,
     audioItemId: audioItem.id,
+  };
+}
+
+function resolveDraggedTrackTargets(params: {
+  items: TimelineItem[];
+  draggedItems: Array<{ id: string; initialTrackId: string }>;
+  tracks: TimelineTrack[];
+  dropTarget: { trackId: string; zone: LinkedDragDropZone | null; createNew?: boolean };
+  preferredTrackHeight: number;
+}): { tracks: TimelineTrack[]; trackAssignments: Map<string, string> } | null {
+  const { items, draggedItems, tracks, dropTarget, preferredTrackHeight } = params;
+  if (!dropTarget.zone) {
+    return null;
+  }
+
+  const draggedItemIds = draggedItems.map((draggedItem) => draggedItem.id);
+  const linkedPair = getDraggedLinkedPair(items, draggedItemIds);
+  if (linkedPair) {
+    const linkedTrackTargets = resolveLinkedDragTrackTargets({
+      tracks,
+      hoveredTrackId: dropTarget.trackId,
+      zone: dropTarget.zone,
+      createNew: dropTarget.createNew,
+      preferredTrackHeight,
+    });
+    if (!linkedTrackTargets) {
+      return null;
+    }
+
+    return {
+      tracks: linkedTrackTargets.tracks,
+      trackAssignments: new Map<string, string>([
+        [linkedPair.videoItemId, linkedTrackTargets.videoTrackId],
+        [linkedPair.audioItemId, linkedTrackTargets.audioTrackId],
+      ]),
+    };
+  }
+
+  if (!dropTarget.createNew) {
+    return null;
+  }
+
+  const createNewTrackTargets = resolveCreateNewDragTrackTargets({
+    tracks,
+    draggedItems: draggedItems
+      .map((draggedItem) => {
+        const sourceItem = items.find((item) => item.id === draggedItem.id);
+        return sourceItem
+          ? {
+            id: sourceItem.id,
+            initialTrackId: draggedItem.initialTrackId,
+            type: sourceItem.type,
+          }
+          : null;
+      })
+      .filter((draggedItem): draggedItem is { id: string; initialTrackId: string; type: TimelineItem['type'] } => draggedItem !== null),
+    zone: dropTarget.zone,
+    preferredTrackHeight,
+  });
+
+  if (!createNewTrackTargets) {
+    return null;
+  }
+
+  return {
+    tracks: createNewTrackTargets.tracks,
+    trackAssignments: createNewTrackTargets.trackAssignments,
   };
 }
 
@@ -521,20 +592,22 @@ export function useTimelineDrag(
         ? deltaX * (clampedDeltaFrames / deltaFrames)
         : deltaX;
 
-      const previewAnchorTrackId = getTrackIdFromMouseY(e.clientY, dragStateRef.current.startTrackId);
-
-      const linkedPair = getDraggedLinkedPair(
-        getItems(),
-        dragStateRef.current.draggedItems.map((draggedItem) => draggedItem.id)
-      );
-      const linkedDropTarget = linkedPair
-        ? (() => {
-          const dropTarget = getTrackDropTarget(e.clientY, dragStateRef.current!.startTrackId);
-          return dropTarget.zone
-            ? { trackId: dropTarget.trackId, zone: dropTarget.zone, createNew: dropTarget.createNew }
-            : null;
-        })()
+      const currentItems = getItems();
+      const dropTarget = getTrackDropTarget(e.clientY, dragStateRef.current.startTrackId);
+      const linkedDropTarget = dropTarget.zone
+        ? { trackId: dropTarget.trackId, zone: dropTarget.zone, createNew: dropTarget.createNew }
         : null;
+      const previewTrackTargets = resolveDraggedTrackTargets({
+        items: currentItems,
+        draggedItems: dragStateRef.current.draggedItems,
+        tracks: tracksRef.current,
+        dropTarget,
+        preferredTrackHeight: tracksRef.current.find((track) => track.id === dropTarget.trackId)?.height
+          ?? tracksRef.current.find((track) => track.id === dragStateRef.current!.startTrackId)?.height
+          ?? 64,
+      });
+      const previewAnchorTrackId = previewTrackTargets?.trackAssignments.get(dragStateRef.current.itemId)
+        ?? getTrackIdFromMouseY(e.clientY, dragStateRef.current.startTrackId);
       dragStateRef.current.currentMouseX = e.clientX;
       dragStateRef.current.currentMouseY = e.clientY;
 
@@ -551,7 +624,7 @@ export function useTimelineDrag(
         let groupEndFrame = -Infinity;
 
         for (const draggedItem of draggedItems) {
-          const sourceItem = getItems().find((i) => i.id === draggedItem.id);
+          const sourceItem = currentItems.find((i) => i.id === draggedItem.id);
           if (!sourceItem) continue;
 
           const proposedStart = draggedItem.initialFrame + deltaFrames;
@@ -567,24 +640,13 @@ export function useTimelineDrag(
       } else {
         // Single item drag - use anchor item
         snapStartFrame = Math.max(0, dragStateRef.current.startFrame + deltaFrames);
-        const draggedItem = getItems().find((i) => i.id === dragStateRef.current?.itemId);
+        const draggedItem = currentItems.find((i) => i.id === dragStateRef.current?.itemId);
         snapDuration = draggedItem?.durationInFrames || 0;
       }
 
       const snapResult = calculateMagneticSnap(snapStartFrame, snapDuration);
-      const previewLinkedTrackTargets = linkedDropTarget && linkedPair
-        ? resolveLinkedDragTrackTargets({
-          tracks: tracksRef.current,
-          hoveredTrackId: linkedDropTarget.trackId,
-          zone: linkedDropTarget.zone,
-          createNew: linkedDropTarget.createNew,
-          preferredTrackHeight: tracksRef.current.find((track) => track.id === linkedDropTarget.trackId)?.height
-            ?? tracksRef.current.find((track) => track.id === dragStateRef.current!.startTrackId)?.height
-            ?? 64,
-        })
-        : null;
       const previewVisualTopByTrackId = buildTrackVisualTopMap(
-        (previewLinkedTrackTargets?.tracks ?? tracksRef.current).map((track) => ({
+        (previewTrackTargets?.tracks ?? tracksRef.current).map((track) => ({
           id: track.id,
           order: track.order ?? 0,
           height: track.height,
@@ -606,17 +668,11 @@ export function useTimelineDrag(
         }
 
         const groupClampOffset = minProposedFrame < 0 ? -minProposedFrame : 0;
-        const previewLinkedAssignments = previewLinkedTrackTargets
-          ? new Map<string, string>([
-            [linkedPair!.videoItemId, previewLinkedTrackTargets.videoTrackId],
-            [linkedPair!.audioItemId, previewLinkedTrackTargets.audioTrackId],
-          ])
-          : null;
         const previewMovedItems = dragStateRef.current.draggedItems.map((draggedItem) => {
-          const sourceItem = getItems().find((timelineItem) => timelineItem.id === draggedItem.id);
+          const sourceItem = currentItems.find((timelineItem) => timelineItem.id === draggedItem.id);
           if (!sourceItem) return null;
 
-          let itemNewTrackId = previewLinkedAssignments?.get(draggedItem.id);
+          let itemNewTrackId = previewTrackTargets?.trackAssignments.get(draggedItem.id);
           if (!itemNewTrackId) {
             const anchorTrackIndex = tracksRef.current.findIndex((track) => track.id === dragStateRef.current!.startTrackId);
             const itemTrackIndex = tracksRef.current.findIndex((track) => track.id === draggedItem.initialTrackId);
@@ -681,16 +737,18 @@ export function useTimelineDrag(
       } else {
         const previewProposedFrame = Math.max(0, snapResult.snappedFrame);
         const itemsExcludingDragged = isAltDragRef.current
-          ? getItems()
-          : getItems().filter((timelineItem) => timelineItem.id !== item.id);
+          ? currentItems
+          : currentItems.filter((timelineItem) => timelineItem.id !== item.id);
+        const previewTargetTrackId = previewTrackTargets?.trackAssignments.get(dragStateRef.current.itemId)
+          ?? previewAnchorTrackId;
         const previewFinalFrame = findNearestAvailableSpace(
           previewProposedFrame,
           item.durationInFrames,
-          previewAnchorTrackId,
+          previewTargetTrackId,
           itemsExcludingDragged
         );
         const currentTop = previewVisualTopByTrackId.get(dragStateRef.current.startTrackId);
-        const targetTop = previewVisualTopByTrackId.get(previewAnchorTrackId);
+        const targetTop = previewVisualTopByTrackId.get(previewTargetTrackId);
         anchorPreviewOffset = {
           x: frameToPixelsRef.current((previewFinalFrame ?? dragStateRef.current.startFrame) - dragStateRef.current.startFrame),
           y: currentTop !== undefined && targetTop !== undefined ? targetTop - currentTop : deltaY,
@@ -746,20 +804,21 @@ export function useTimelineDrag(
       // Calculate frame delta
       const deltaFrames = pixelsToFrameRef.current(deltaX);
 
+      const currentItems = getItems();
+      const dropTarget = getTrackDropTarget(dragState.currentMouseY, dragState.startTrackId);
+      const resolvedTrackTargets = resolveDraggedTrackTargets({
+        items: currentItems,
+        draggedItems: dragState.draggedItems,
+        tracks: tracksRef.current,
+        dropTarget,
+        preferredTrackHeight: tracksRef.current.find((track) => track.id === dropTarget.trackId)?.height
+          ?? tracksRef.current.find((track) => track.id === dragState.startTrackId)?.height
+          ?? 64,
+      });
+
       // Calculate new track for anchor item
-      const newTrackId = getTrackIdFromMouseY(dragState.currentMouseY, dragState.startTrackId);
-      const linkedPair = getDraggedLinkedPair(
-        getItems(),
-        dragState.draggedItems.map((draggedItem) => draggedItem.id)
-      );
-      const linkedDropTarget = linkedPair
-        ? (() => {
-          const dropTarget = getTrackDropTarget(dragState.currentMouseY, dragState.startTrackId);
-          return dropTarget.zone
-            ? { trackId: dropTarget.trackId, zone: dropTarget.zone, createNew: dropTarget.createNew }
-            : null;
-        })()
-        : null;
+      const newTrackId = resolvedTrackTargets?.trackAssignments.get(dragState.itemId)
+        ?? getTrackIdFromMouseY(dragState.currentMouseY, dragState.startTrackId);
 
       // Multi-item drag or single?
       if (dragState.draggedItems.length > 1) {
@@ -769,7 +828,7 @@ export function useTimelineDrag(
         let groupEndFrame = -Infinity;
 
         for (const draggedItem of dragState.draggedItems) {
-          const sourceItem = getItems().find((i) => i.id === draggedItem.id);
+          const sourceItem = currentItems.find((i) => i.id === draggedItem.id);
           if (!sourceItem) continue;
 
           const proposedStart = draggedItem.initialFrame + deltaFrames;
@@ -803,34 +862,16 @@ export function useTimelineDrag(
         // Calculate group clamp offset - if any item would go below 0, shift the whole group
         const groupClampOffset = minProposedFrame < 0 ? -minProposedFrame : 0;
 
-        const linkedTrackTargets = linkedDropTarget && linkedPair
-          ? resolveLinkedDragTrackTargets({
-            tracks: tracksRef.current,
-            hoveredTrackId: linkedDropTarget.trackId,
-            zone: linkedDropTarget.zone,
-            createNew: linkedDropTarget.createNew,
-            preferredTrackHeight: tracksRef.current.find((track) => track.id === linkedDropTarget.trackId)?.height
-              ?? tracksRef.current.find((track) => track.id === dragState.startTrackId)?.height
-              ?? 64,
-          })
-          : null;
-        const linkedTrackAssignments = linkedTrackTargets
-          ? new Map<string, string>([
-            [linkedPair!.videoItemId, linkedTrackTargets.videoTrackId],
-            [linkedPair!.audioItemId, linkedTrackTargets.audioTrackId],
-          ])
-          : null;
-
         // Multi-item drag: calculate new positions for all items
         const movedItems = dragState.draggedItems.map((draggedItem) => {
-          const sourceItem = getItems().find((i) => i.id === draggedItem.id);
+          const sourceItem = currentItems.find((i) => i.id === draggedItem.id);
           if (!sourceItem) return null;
 
           // Calculate new frame (maintain relative offset from anchor)
           // Apply frame delta, snap adjustment, AND group clamp offset to all items uniformly
           const newFrom = draggedItem.initialFrame + deltaFrames + snapDelta + groupClampOffset;
 
-          let itemNewTrackId = linkedTrackAssignments?.get(draggedItem.id);
+          let itemNewTrackId = resolvedTrackTargets?.trackAssignments.get(draggedItem.id);
           if (!itemNewTrackId) {
             const anchorTrackIndex = tracksRef.current.findIndex(
               (t) => t.id === dragState.startTrackId
@@ -866,8 +907,8 @@ export function useTimelineDrag(
         const draggedItemIds = movedItems.map((m) => m.id);
         // For alt-drag (duplicate), include all items in collision check since originals stay in place
         const itemsExcludingDragged = isAltDrag
-          ? getItems()
-          : getItems().filter((i) => !draggedItemIds.includes(i.id));
+          ? currentItems
+          : currentItems.filter((i) => !draggedItemIds.includes(i.id));
 
         let maxSnapForward = 0; // How many frames we need to move the whole group forward
 
@@ -913,8 +954,8 @@ export function useTimelineDrag(
             trackId: m.newTrackId,
           }));
 
-          if (linkedTrackTargets) {
-            duplicateItemsWithTrackChangesRef.current(linkedTrackTargets.tracks, itemIds, positions);
+          if (resolvedTrackTargets) {
+            duplicateItemsWithTrackChangesRef.current(resolvedTrackTargets.tracks, itemIds, positions);
           } else {
             duplicateItemsRef.current(itemIds, positions);
           }
@@ -923,13 +964,13 @@ export function useTimelineDrag(
           const allUpdates = movedItems.map((m) => ({
             id: m.id,
             from: m.newFrom + maxSnapForward,
-            trackId: m.newTrackId !== getItems().find((i) => i.id === m.id)?.trackId
+            trackId: m.newTrackId !== currentItems.find((i) => i.id === m.id)?.trackId
               ? m.newTrackId
               : undefined,
           }));
 
-          if (linkedTrackTargets) {
-            moveItemsWithTrackChangesRef.current(linkedTrackTargets.tracks, allUpdates);
+          if (resolvedTrackTargets) {
+            moveItemsWithTrackChangesRef.current(resolvedTrackTargets.tracks, allUpdates);
           } else {
             moveItemsRef.current(allUpdates);
           }
@@ -946,8 +987,8 @@ export function useTimelineDrag(
         // Find nearest available space (snaps forward if collision)
         // For alt-drag, include the original item in collision check since it stays in place
         const itemsExcludingDragged = isAltDrag
-          ? getItems()
-          : getItems().filter((i) => i.id !== item.id);
+          ? currentItems
+          : currentItems.filter((i) => i.id !== item.id);
         const finalFrame = findNearestAvailableSpace(
           proposedFrame,
           item.durationInFrames,
@@ -958,14 +999,29 @@ export function useTimelineDrag(
         if (finalFrame !== null) {
           if (isAltDrag) {
             // ALT-DRAG: Duplicate item at new position
-            duplicateItemsRef.current(
-              [item.id],
-              [{ from: finalFrame, trackId: newTrackId }]
-            );
+            if (resolvedTrackTargets) {
+              duplicateItemsWithTrackChangesRef.current(
+                resolvedTrackTargets.tracks,
+                [item.id],
+                [{ from: finalFrame, trackId: newTrackId }]
+              );
+            } else {
+              duplicateItemsRef.current(
+                [item.id],
+                [{ from: finalFrame, trackId: newTrackId }]
+              );
+            }
           } else {
             // Normal drag: Move item
             const trackChanged = newTrackId !== dragState.startTrackId;
-            moveItemRef.current(item.id, finalFrame, trackChanged ? newTrackId : undefined);
+            if (resolvedTrackTargets) {
+              moveItemsWithTrackChangesRef.current(
+                resolvedTrackTargets.tracks,
+                [{ id: item.id, from: finalFrame, trackId: newTrackId }]
+              );
+            } else {
+              moveItemRef.current(item.id, finalFrame, trackChanged ? newTrackId : undefined);
+            }
           }
         } else {
           // No space available - cancel drag (keep at original position)

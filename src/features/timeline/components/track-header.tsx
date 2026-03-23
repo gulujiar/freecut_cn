@@ -18,6 +18,8 @@ interface TrackHeaderProps {
   track: TimelineTrack;
   isActive: boolean;
   isSelected: boolean;
+  canDeleteTrack: boolean;
+  canDeleteEmptyTracks: boolean;
   onToggleLock: () => void;
   onToggleVisibility: () => void;
   onToggleMute: () => void;
@@ -25,6 +27,10 @@ interface TrackHeaderProps {
   onSetVolume: (volume: number) => void;
   onSelect: (e: React.MouseEvent) => void;
   onCloseGaps?: () => void;
+  onAddVideoTrack: () => void;
+  onAddAudioTrack: () => void;
+  onDeleteTrack: () => void;
+  onDeleteEmptyTracks: () => void;
 }
 
 /**
@@ -34,7 +40,9 @@ function areTrackHeaderPropsEqual(prev: TrackHeaderProps, next: TrackHeaderProps
   return (
     prev.track === next.track &&
     prev.isActive === next.isActive &&
-    prev.isSelected === next.isSelected
+    prev.isSelected === next.isSelected &&
+    prev.canDeleteTrack === next.canDeleteTrack &&
+    prev.canDeleteEmptyTracks === next.canDeleteEmptyTracks
   );
   // Callbacks (onToggleLock, etc.) are ignored - they're recreated each render but functionality is same
 }
@@ -45,13 +53,15 @@ function areTrackHeaderPropsEqual(prev: TrackHeaderProps, next: TrackHeaderProps
  * Displays track name, controls, and handles selection.
  * Shows active state with background color.
  * Supports group tracks with collapse/expand and indentation.
- * Right-click context menu for group operations.
+ * Right-click context menu for track actions.
  * Memoized to prevent re-renders when props haven't changed.
  */
 export const TrackHeader = memo(function TrackHeader({
   track,
   isActive,
   isSelected,
+  canDeleteTrack,
+  canDeleteEmptyTracks,
   onToggleLock,
   onToggleVisibility,
   onToggleMute,
@@ -59,6 +69,10 @@ export const TrackHeader = memo(function TrackHeader({
   onSetVolume,
   onSelect,
   onCloseGaps,
+  onAddVideoTrack,
+  onAddAudioTrack,
+  onDeleteTrack,
+  onDeleteEmptyTracks,
 }: TrackHeaderProps) {
   // Use track drag hook (visuals handled centrally by timeline.tsx via DOM)
   const { handleDragStart } = useTrackDrag(track);
@@ -249,19 +263,19 @@ export const TrackHeader = memo(function TrackHeader({
           Close All Gaps
         </ContextMenuItem>
 
-        {/* Track controls */}
         <ContextMenuSeparator />
-        <ContextMenuItem onClick={onToggleVisibility}>
-          {track.visible ? 'Hide Track' : 'Show Track'}
+        <ContextMenuItem onClick={onAddVideoTrack}>
+          Add Video Track
         </ContextMenuItem>
-        <ContextMenuItem onClick={onToggleMute}>
-          {track.muted ? 'Unmute Track' : 'Mute Track'}
+        <ContextMenuItem onClick={onAddAudioTrack}>
+          Add Audio Track
         </ContextMenuItem>
-        <ContextMenuItem onClick={() => onSetVolume(0)}>
-          Reset Track Gain
+        <ContextMenuSeparator />
+        <ContextMenuItem disabled={!canDeleteTrack} onClick={onDeleteTrack}>
+          Delete Track
         </ContextMenuItem>
-        <ContextMenuItem onClick={onToggleLock}>
-          {track.locked ? 'Unlock Track' : 'Lock Track'}
+        <ContextMenuItem disabled={!canDeleteEmptyTracks} onClick={onDeleteEmptyTracks}>
+          Delete Empty Tracks
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

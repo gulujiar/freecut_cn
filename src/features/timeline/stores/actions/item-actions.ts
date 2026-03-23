@@ -21,7 +21,12 @@ import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 import { type CollisionRect } from '../../utils/collision-utils';
-import { canLinkItems, getLinkedItemIds, getLinkedItems } from '../../utils/linked-items';
+import {
+  canLinkItems,
+  expandSelectionWithLinkedItems,
+  getLinkedItemIds,
+  getLinkedItems,
+} from '../../utils/linked-items';
 
 function findNextAvailableSpaceOnTrack(
   proposedFrom: number,
@@ -89,6 +94,47 @@ function placeItemsWithoutTimelineOverlap(items: TimelineItem[]): TimelineItem[]
   }
 
   return placedItems;
+}
+
+function expandIdsWithLinkedItems(ids: string[]): string[] {
+  return expandSelectionWithLinkedItems(useItemsStore.getState().items, ids);
+}
+
+function buildLinkedLeftShiftUpdates(
+  items: TimelineItem[],
+  baseShiftByItemId: ReadonlyMap<string, number>
+): Array<{ id: string; from: number }> {
+  const shiftByItemId = new Map(baseShiftByItemId);
+  const visited = new Set<string>();
+
+  for (const item of items) {
+    if (visited.has(item.id)) continue;
+
+    const linkedItems = getLinkedItems(items, item.id);
+    for (const linkedItem of linkedItems) {
+      visited.add(linkedItem.id);
+    }
+
+    if (linkedItems.length <= 1) continue;
+
+    let groupShift = 0;
+    for (const linkedItem of linkedItems) {
+      groupShift = Math.max(groupShift, baseShiftByItemId.get(linkedItem.id) ?? 0);
+    }
+
+    if (groupShift <= 0) continue;
+
+    for (const linkedItem of linkedItems) {
+      shiftByItemId.set(linkedItem.id, groupShift);
+    }
+  }
+
+  return items.flatMap((item) => {
+    const shiftAmount = shiftByItemId.get(item.id) ?? 0;
+    return shiftAmount > 0
+      ? [{ id: item.id, from: item.from - shiftAmount }]
+      : [];
+  });
 }
 
 export function addItem(item: TimelineItem): void {
@@ -180,73 +226,127 @@ export function linkItems(ids: string[]): boolean {
 }
 
 export function removeItems(ids: string[]): void {
+  const expandedIds = expandIdsWithLinkedItems(ids);
+  if (expandedIds.length === 0) return;
+
   execute('REMOVE_ITEMS', () => {
     // Remove items
-    useItemsStore.getState()._removeItems(ids);
+    useItemsStore.getState()._removeItems(expandedIds);
 
     // Cascade: Remove transitions referencing deleted items
-    useTransitionsStore.getState()._removeTransitionsForItems(ids);
+    useTransitionsStore.getState()._removeTransitionsForItems(expandedIds);
 
     // Cascade: Remove keyframes for deleted items
-    useKeyframesStore.getState()._removeKeyframesForItems(ids);
+    useKeyframesStore.getState()._removeKeyframesForItems(expandedIds);
 
     useTimelineSettingsStore.getState().markDirty();
-  }, { ids });
+  }, { ids: expandedIds });
 }
 
 export function rippleDeleteItems(ids: string[]): void {
+  const items = useItemsStore.getState().items;
+  const expandedIds = expandIdsWithLinkedItems(ids);
+  if (expandedIds.length === 0) return;
+
+  const idsToDelete = new Set(expandedIds);
+  const remainingItems = items.filter((item) => !idsToDelete.has(item.id));
+  const baseShiftByItemId = new Map<string, number>();
+
+  for (const item of remainingItems) {
+    const shiftAmount = items
+      .filter((candidate) => idsToDelete.has(candidate.id))
+      .filter((deletedItem) => deletedItem.trackId === item.trackId && deletedItem.from + deletedItem.durationInFrames <= item.from)
+      .reduce((sum, deletedItem) => sum + deletedItem.durationInFrames, 0);
+
+    if (shiftAmount > 0) {
+      baseShiftByItemId.set(item.id, shiftAmount);
+    }
+  }
+
+  const updates = buildLinkedLeftShiftUpdates(remainingItems, baseShiftByItemId);
+
   execute('RIPPLE_DELETE_ITEMS', () => {
-    useItemsStore.getState()._rippleDeleteItems(ids);
+    useItemsStore.getState()._removeItems(expandedIds);
+    if (updates.length > 0) {
+      useItemsStore.getState()._moveItems(updates);
+    }
 
     // Cascade: Remove transitions and keyframes
-    useTransitionsStore.getState()._removeTransitionsForItems(ids);
-    useKeyframesStore.getState()._removeKeyframesForItems(ids);
+    useTransitionsStore.getState()._removeTransitionsForItems(expandedIds);
+    useKeyframesStore.getState()._removeKeyframesForItems(expandedIds);
 
     useTimelineSettingsStore.getState().markDirty();
-  }, { ids });
+  }, { ids: expandedIds });
 }
 
 export function closeGapAtPosition(trackId: string, frame: number): void {
-  execute('CLOSE_GAP', () => {
-    useItemsStore.getState()._closeGapAtPosition(trackId, frame);
+  const items = useItemsStore.getState().items;
+  const targetFrame = Math.max(0, Math.round(frame));
+  const trackItems = items
+    .filter((item) => item.trackId === trackId)
+    .sort((left, right) => left.from - right.from);
 
-    // Repair all transitions on this track
-    const items = useItemsStore.getState().items;
-    const trackItemIds = items.filter((i) => i.trackId === trackId).map((i) => i.id);
-    applyTransitionRepairs(trackItemIds);
+  if (trackItems.length === 0) return;
+
+  let gapStart = 0;
+  let gapEnd = 0;
+
+  for (const item of trackItems) {
+    if (targetFrame >= gapStart && targetFrame < item.from) {
+      gapEnd = item.from;
+      break;
+    }
+    gapStart = item.from + item.durationInFrames;
+  }
+
+  if (gapEnd <= gapStart) return;
+
+  const gapSize = gapEnd - gapStart;
+  const baseShiftByItemId = new Map<string, number>();
+  for (const item of items) {
+    if (item.trackId === trackId && item.from >= gapEnd) {
+      baseShiftByItemId.set(item.id, gapSize);
+    }
+  }
+
+  const updates = buildLinkedLeftShiftUpdates(items, baseShiftByItemId);
+  if (updates.length === 0) return;
+
+  execute('CLOSE_GAP', () => {
+    useItemsStore.getState()._moveItems(updates);
+
+    applyTransitionRepairs(updates.map((update) => update.id));
 
     useTimelineSettingsStore.getState().markDirty();
   }, { trackId, frame });
 }
 
 export function closeAllGapsOnTrack(trackId: string): void {
+  const items = useItemsStore.getState().items;
+  const trackItems = items
+    .filter((item) => item.trackId === trackId)
+    .sort((left, right) => left.from - right.from);
+
+  if (trackItems.length === 0) return;
+
+  let cursor = 0;
+  const baseShiftByItemId = new Map<string, number>();
+  for (const item of trackItems) {
+    const newFrom = item.from > cursor ? cursor : item.from;
+    const shiftAmount = item.from - newFrom;
+    if (shiftAmount > 0) {
+      baseShiftByItemId.set(item.id, shiftAmount);
+    }
+    cursor = newFrom + item.durationInFrames;
+  }
+
+  const updates = buildLinkedLeftShiftUpdates(items, baseShiftByItemId);
+  if (updates.length === 0) return;
+
   execute('CLOSE_ALL_GAPS', () => {
-    const items = useItemsStore.getState().items;
-    const trackItems = items
-      .filter((i) => i.trackId === trackId)
-      .sort((a, b) => a.from - b.from);
-
-    if (trackItems.length === 0) return;
-
-    // Walk items left-to-right, shift each to close any gap before it
-    let cursor = 0;
-    const updates: Array<{ id: string; from: number }> = [];
-    for (const item of trackItems) {
-      const newFrom = item.from > cursor ? cursor : item.from;
-      if (newFrom !== item.from) {
-        updates.push({ id: item.id, from: newFrom });
-      }
-      cursor = newFrom + item.durationInFrames;
-    }
-
-    if (updates.length > 0) {
-      useItemsStore.getState()._moveItems(updates);
-
-      // Repair transitions on affected items
-      const trackItemIds = trackItems.map((i) => i.id);
-      applyTransitionRepairs(trackItemIds);
-      useTimelineSettingsStore.getState().markDirty();
-    }
+    useItemsStore.getState()._moveItems(updates);
+    applyTransitionRepairs(updates.map((update) => update.id));
+    useTimelineSettingsStore.getState().markDirty();
   }, { trackId });
 }
 

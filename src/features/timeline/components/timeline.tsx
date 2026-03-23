@@ -7,6 +7,7 @@ import { TrackHeader } from './track-header';
 import { KeyframeGraphPanel } from './keyframe-graph-panel';
 import { TrackRowFrame, TrackSectionDivider } from './track-row-frame';
 import { useTimelineTracks } from '../hooks/use-timeline-tracks';
+import { useItemsStore } from '../stores/items-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useEditorStore } from '@/shared/state/editor';
 import { useTimelineStore } from '../stores/timeline-store';
@@ -18,9 +19,9 @@ import { Button } from '@/components/ui/button';
 import { Plus, Minus } from 'lucide-react';
 import { CompositionBreadcrumbs } from './composition-breadcrumbs';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
-import type { TimelineTrack } from '@/types/timeline';
 import { trackDropIndexRef, trackDragOffsetRef, trackDragJustDroppedRef } from '../hooks/use-track-drag';
-import { createClassicTrack, getTrackKind } from '../utils/classic-tracks';
+import { createClassicTrack, getAdjacentTrackOrder, getTrackKind } from '../utils/classic-tracks';
+import { getEmptyTrackIdsForRemoval } from '../utils/track-removal';
 import { createLogger } from '@/shared/logging/logger';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
 import { TRACK_SECTION_DIVIDER_HEIGHT } from '../constants';
@@ -50,7 +51,6 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   const {
     tracks,
     addTrack,
-    insertTrack,
     removeTracks,
     toggleTrackLock,
     toggleTrackVisibility,
@@ -58,6 +58,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     toggleTrackSolo,
     setTrackVolume,
   } = useTimelineTracks();
+  const itemsByTrackId = useItemsStore((s) => s.itemsByTrackId);
 
   // Selection state - use granular selectors
   const activeTrackId = useSelectionStore((s) => s.activeTrackId);
@@ -102,6 +103,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   const [isEditorPanelOpen, setIsEditorPanelOpen] = useState(false);
   const colorScopesOpen = useEditorStore((s) => s.colorScopesOpen);
   const toggleColorScopesOpen = useEditorStore((s) => s.toggleColorScopesOpen);
+  const setTimelineTracks = useTimelineStore((s) => s.setTracks);
 
   const setEditorPanelOpen = useCallback(
     (nextOpen: boolean) => {
@@ -397,45 +399,103 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     return getTrackKind(activeTrack) ?? 'video';
   }, [activeTrackId, tracks]);
 
-  /**
-   * Handle adding a new track
-   * Inserts before the active track (appears above it), or at the top if no active track.
-   */
-  const handleAddTrack = () => {
-    // Find the minimum order value to place new track at the top
-    // New tracks should have order lower than all existing tracks
-    const minOrder = tracks.length > 0
-      ? Math.min(...tracks.map(t => t.order ?? 0))
-      : 0;
+  const syncTrackSelectionAfterRemoval = useCallback((removedTrackIds: string[], fallbackTrackId: string | null) => {
+    const removedTrackIdsSet = new Set(removedTrackIds);
+    const selectionState = useSelectionStore.getState();
+    const remainingSelectedTrackIds = selectionState.selectedTrackIds.filter(
+      (trackId) => !removedTrackIdsSet.has(trackId)
+    );
 
-    const newTrack: TimelineTrack = createClassicTrack({
+    if (remainingSelectedTrackIds.length > 0) {
+      selectionState.selectTracks(remainingSelectedTrackIds);
+      return;
+    }
+
+    if (selectionState.activeTrackId && !removedTrackIdsSet.has(selectionState.activeTrackId)) {
+      return;
+    }
+
+    selectionState.setActiveTrack(fallbackTrackId);
+  }, []);
+
+  const addVideoTrackToTop = useCallback(() => {
+    const newTrack = createClassicTrack({
       tracks,
-      kind: nextTrackKind,
-      order: minOrder - 1,
+      kind: 'video',
+      order: 0,
       height: editorLayout.timelineTrackHeight,
     });
 
-    if (activeTrackId) {
-      insertTrack(newTrack, activeTrackId);
-    } else {
-      // Add at the top (beginning)
-      addTrack(newTrack);
-    }
+    addTrack(newTrack);
 
-    // Set the new track as active immediately after insertion
-    // Use setTimeout to ensure state updates have propagated
     setTimeout(() => {
       setActiveTrack(newTrack.id);
     }, 0);
-  };
+  }, [addTrack, editorLayout.timelineTrackHeight, setActiveTrack, tracks]);
+
+  const appendAudioTrackToSection = useCallback(() => {
+    const audioAnchorTrack = audioTracks[audioTracks.length - 1]
+      ?? videoTracks[videoTracks.length - 1]
+      ?? tracks[tracks.length - 1]
+      ?? null;
+
+    const newTrack = createClassicTrack({
+      tracks,
+      kind: 'audio',
+      order: audioAnchorTrack ? getAdjacentTrackOrder(tracks, audioAnchorTrack, 'below') : 0,
+      height: editorLayout.timelineTrackHeight,
+    });
+
+    setTimelineTracks([...tracks, newTrack]);
+
+    setTimeout(() => {
+      setActiveTrack(newTrack.id);
+    }, 0);
+  }, [audioTracks, editorLayout.timelineTrackHeight, setActiveTrack, setTimelineTracks, tracks, videoTracks]);
+
+  /**
+   * Handle adding a new track
+   * Video tracks add to the top; audio tracks append within the audio section.
+   */
+  const handleAddTrack = useCallback(() => {
+    if (nextTrackKind === 'audio') {
+      appendAudioTrackToSection();
+      return;
+    }
+
+    addVideoTrackToTop();
+  }, [addVideoTrackToTop, appendAudioTrackToSection, nextTrackKind]);
+
+  const handleDeleteTrack = useCallback((trackId: string) => {
+    if (tracks.length <= 1) {
+      logger.warn('Cannot remove all tracks');
+      return;
+    }
+
+    removeTracks([trackId]);
+
+    const remainingTracks = tracks.filter((track) => track.id !== trackId);
+    syncTrackSelectionAfterRemoval([trackId], remainingTracks[0]?.id ?? null);
+  }, [removeTracks, syncTrackSelectionAfterRemoval, tracks]);
+
+  const handleDeleteEmptyTracks = useCallback((contextTrackId: string) => {
+    const emptyTrackIds = getEmptyTrackIdsForRemoval(tracks, itemsByTrackId, contextTrackId);
+    if (emptyTrackIds.length === 0) return;
+
+    const removedTrackIdsSet = new Set(emptyTrackIds);
+    removeTracks(emptyTrackIds);
+
+    const remainingTracks = tracks.filter((track) => !removedTrackIdsSet.has(track.id));
+    syncTrackSelectionAfterRemoval(emptyTrackIds, remainingTracks[0]?.id ?? null);
+  }, [itemsByTrackId, removeTracks, syncTrackSelectionAfterRemoval, tracks]);
 
   /**
    * Handle removing selected tracks
    * Removes all selected tracks or the active track if none selected.
    * Keeps at least one track in the timeline.
    */
-  const handleRemoveTracks = () => {
-    let tracksToRemove = selectedTrackIds.length > 0
+  const handleRemoveTracks = useCallback(() => {
+    const tracksToRemove = selectedTrackIds.length > 0
       ? [...selectedTrackIds]
       : activeTrackId
         ? [activeTrackId]
@@ -452,12 +512,9 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
 
     removeTracks(tracksToRemove);
 
-    // Find the next track to select (first remaining track not being removed)
     const remainingTrack = tracks.find((t) => !tracksToRemoveSet.has(t.id));
-    if (remainingTrack) {
-      setActiveTrack(remainingTrack.id);
-    }
-  };
+    syncTrackSelectionAfterRemoval(tracksToRemove, remainingTrack?.id ?? null);
+  }, [activeTrackId, removeTracks, selectedTrackIds, syncTrackSelectionAfterRemoval, tracks]);
 
   return (
 
@@ -499,9 +556,9 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
                 size="icon"
                 className="h-6 w-6"
                 onClick={handleAddTrack}
-                title={activeTrackId
-                  ? `Add ${nextTrackKind} track above selected`
-                  : `Add ${nextTrackKind} track at top`}
+                title={nextTrackKind === 'audio'
+                  ? 'Add audio track to audio section'
+                  : 'Add video track at top'}
               >
                 <Plus className="w-3 h-3" />
               </Button>
@@ -538,6 +595,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
                 const trackIndex = visibleTracks.findIndex((candidate) => candidate.id === track.id);
                 const previousTrack = trackIndex > 0 ? (visibleTracks[trackIndex - 1] ?? null) : null;
                 const nextTrack = trackIndex < visibleTracks.length - 1 ? (visibleTracks[trackIndex + 1] ?? null) : null;
+                const emptyTrackIdsToRemove = getEmptyTrackIdsForRemoval(tracks, itemsByTrackId, track.id);
                 const showSectionDivider = previousTrack !== null
                   && getTrackKind(previousTrack) === 'video'
                   && getTrackKind(track) === 'audio';
@@ -554,12 +612,18 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
                         track={track}
                         isActive={activeTrackId === track.id}
                         isSelected={selectedTrackIdsSet.has(track.id)}
+                        canDeleteTrack={tracks.length > 1}
+                        canDeleteEmptyTracks={emptyTrackIdsToRemove.length > 0}
                         onToggleLock={() => toggleTrackLock(track.id)}
                         onToggleVisibility={() => toggleTrackVisibility(track.id)}
                         onToggleMute={() => toggleTrackMute(track.id)}
                         onToggleSolo={() => toggleTrackSolo(track.id)}
                         onSetVolume={(volume) => setTrackVolume(track.id, volume)}
                         onCloseGaps={() => useTimelineStore.getState().closeAllGapsOnTrack(track.id)}
+                        onAddVideoTrack={addVideoTrackToTop}
+                        onAddAudioTrack={appendAudioTrackToSection}
+                        onDeleteTrack={() => handleDeleteTrack(track.id)}
+                        onDeleteEmptyTracks={() => handleDeleteEmptyTracks(track.id)}
                         onSelect={(e) => {
                           // After a drag-drop, suppress the click to retain selection
                           if (trackDragJustDroppedRef.current) return;

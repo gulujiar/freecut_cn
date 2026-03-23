@@ -5,6 +5,7 @@ import type { TransformProperties } from '@/types/transform';
 import type { VisualEffect, ItemEffect } from '@/types/effects';
 import { clampTrimAmount, clampToAdjacentItems, calculateTrimSourceUpdate } from '../utils/trim-utils';
 import { getSourceProperties, isMediaItem, calculateSplitSourceBoundaries, timelineToSourceFrames, calculateSpeed, clampSpeed } from '../utils/source-calculations';
+import { getLinkedItems } from '../utils/linked-items';
 import { useCompositionNavigationStore } from './composition-navigation-store';
 import { useTimelineSettingsStore } from './timeline-settings-store';
 import { useTransitionsStore } from './transitions-store';
@@ -166,6 +167,45 @@ function getTransitionLinkedIds(itemId: string): Set<string> {
   return linkedIds;
 }
 
+function buildRippleShiftByItemId(items: TimelineItem[], deletedItems: TimelineItem[]): Map<string, number> {
+  const shiftByItemId = new Map<string, number>();
+
+  for (const item of items) {
+    let shiftAmount = 0;
+    for (const deletedItem of deletedItems) {
+      if (deletedItem.trackId === item.trackId && deletedItem.from + deletedItem.durationInFrames <= item.from) {
+        shiftAmount += deletedItem.durationInFrames;
+      }
+    }
+    shiftByItemId.set(item.id, shiftAmount);
+  }
+
+  const visited = new Set<string>();
+  for (const item of items) {
+    if (visited.has(item.id)) continue;
+
+    const linkedItems = getLinkedItems(items, item.id);
+    for (const linkedItem of linkedItems) {
+      visited.add(linkedItem.id);
+    }
+
+    if (linkedItems.length <= 1) continue;
+
+    let groupShift = 0;
+    for (const linkedItem of linkedItems) {
+      groupShift = Math.max(groupShift, shiftByItemId.get(linkedItem.id) ?? 0);
+    }
+
+    if (groupShift <= 0) continue;
+
+    for (const linkedItem of linkedItems) {
+      shiftByItemId.set(linkedItem.id, groupShift);
+    }
+  }
+
+  return shiftByItemId;
+}
+
 /**
  * Items state - timeline clips/items and tracks.
  * This is the core timeline content. Complex cross-domain operations
@@ -277,15 +317,15 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
 
       if (itemsToDelete.length === 0) return state;
 
-      const newItems = state.items
-        .filter((i) => !idsToDelete.has(i.id))
-        .map((item) => {
-          const shiftAmount = itemsToDelete
-            .filter((d) => d.trackId === item.trackId && d.from + d.durationInFrames <= item.from)
-            .reduce((sum, d) => sum + d.durationInFrames, 0);
+      const remainingItems = state.items.filter((i) => !idsToDelete.has(i.id));
+      const shiftByItemId = buildRippleShiftByItemId(remainingItems, itemsToDelete);
 
-          return shiftAmount > 0 ? { ...item, from: item.from - shiftAmount } : item;
-        });
+      const newItems = remainingItems.map((item) => {
+        const shiftAmount = shiftByItemId.get(item.id) ?? 0;
+        return shiftAmount > 0
+          ? normalizeFrameFields({ ...item, from: item.from - shiftAmount })
+          : item;
+      });
 
       return withItemIndexes(newItems, state);
     }),

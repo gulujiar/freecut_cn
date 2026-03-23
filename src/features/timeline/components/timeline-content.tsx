@@ -31,6 +31,7 @@ import { TimelinePlayhead } from './timeline-playhead';
 import { TimelinePreviewScrubber } from './timeline-preview-scrubber';
 import { TimelineTrack } from './timeline-track';
 import { TimelineGuidelines } from './timeline-guidelines';
+import { TimelineMediaDropZone } from './timeline-media-drop-zone';
 import { TrackRowFrame, TrackSectionDivider } from './track-row-frame';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 
@@ -95,6 +96,10 @@ export const TimelineContent = memo(function TimelineContent({
 
   // Derive visible tracks (hides children of collapsed groups)
   const tracks = allTracks;
+  const firstTrackId = tracks[0]?.id ?? null;
+  const lastTrackId = tracks[tracks.length - 1]?.id ?? null;
+  const topZoneAnchorTrackId = tracks.find((track) => getTrackKind(track) === 'video')?.id ?? firstTrackId;
+  const bottomZoneAnchorTrackId = [...tracks].reverse().find((track) => getTrackKind(track) === 'audio')?.id ?? lastTrackId;
 
   // PERFORMANCE: Don't subscribe to items directly - it causes ALL tracks to re-render
   // when ANY item changes. Instead, use derived selectors for specific needs.
@@ -934,7 +939,14 @@ export const TimelineContent = memo(function TimelineContent({
             willChange: 'contents',
           }}
         >
-          {topSectionSpacerHeight > 0 && (
+          {topSectionSpacerHeight > 0 && topZoneAnchorTrackId && (
+            <TimelineMediaDropZone
+              height={topSectionSpacerHeight}
+              zone="video"
+              anchorTrackId={topZoneAnchorTrackId}
+            />
+          )}
+          {topSectionSpacerHeight > 0 && !topZoneAnchorTrackId && (
             <div aria-hidden="true" style={{ height: `${topSectionSpacerHeight}px` }} />
           )}
 
@@ -962,7 +974,14 @@ export const TimelineContent = memo(function TimelineContent({
             );
           })}
 
-          {bottomSectionSpacerHeight > 0 && (
+          {bottomSectionSpacerHeight > 0 && bottomZoneAnchorTrackId && (
+            <TimelineMediaDropZone
+              height={bottomSectionSpacerHeight}
+              zone="audio"
+              anchorTrackId={bottomZoneAnchorTrackId}
+            />
+          )}
+          {bottomSectionSpacerHeight > 0 && !bottomZoneAnchorTrackId && (
             <div aria-hidden="true" style={{ height: `${bottomSectionSpacerHeight}px` }} />
           )}
 

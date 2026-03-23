@@ -6,7 +6,15 @@ import { useKeyframesStore } from '../keyframes-store';
 import { useTimelineCommandStore } from '../timeline-command-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { linkItems, splitItem, unlinkItems } from './item-actions';
+import {
+  closeAllGapsOnTrack,
+  closeGapAtPosition,
+  linkItems,
+  removeItems,
+  rippleDeleteItems,
+  splitItem,
+  unlinkItems,
+} from './item-actions';
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
   return {
@@ -85,6 +93,174 @@ describe('linked timeline items', () => {
     expect(items.find((item) => item.id === 'video-1')?.linkedGroupId).toBe('video-1');
     expect(items.find((item) => item.id === 'audio-1')?.linkedGroupId).toBe('audio-1');
     expect(useSelectionStore.getState().selectedItemIds).toEqual(['video-1', 'audio-1']);
+  });
+
+  it('plain delete removes a linked pair when one member is targeted', () => {
+    useItemsStore.getState().setItems([makeVideoItem(), makeAudioItem()]);
+    useKeyframesStore.getState().setKeyframes([
+      {
+        itemId: 'audio-1',
+        properties: [
+          {
+            property: 'volume',
+            keyframes: [{ id: 'kf-delete', frame: 0, value: 1, easing: 'linear' }],
+          },
+        ],
+      },
+    ]);
+
+    removeItems(['video-1']);
+
+    expect(useItemsStore.getState().items).toEqual([]);
+    expect(useKeyframesStore.getState().getKeyframesForItem('audio-1')).toBeUndefined();
+  });
+
+  it('ripple deletes a linked pair when only one member is targeted', () => {
+    useItemsStore.getState().setItems([
+      makeVideoItem(),
+      makeAudioItem(),
+      makeVideoItem({
+        id: 'video-2',
+        from: 90,
+        linkedGroupId: 'group-2',
+        originId: 'origin-2',
+        mediaId: 'media-2',
+      }),
+      makeAudioItem({
+        id: 'audio-2',
+        from: 90,
+        linkedGroupId: 'group-2',
+        originId: 'origin-2',
+        mediaId: 'media-2',
+      }),
+    ]);
+    useKeyframesStore.getState().setKeyframes([
+      {
+        itemId: 'audio-1',
+        properties: [
+          {
+            property: 'volume',
+            keyframes: [{ id: 'kf-1', frame: 0, value: 1, easing: 'linear' }],
+          },
+        ],
+      },
+    ]);
+
+    rippleDeleteItems(['video-1']);
+
+    const items = useItemsStore.getState().items;
+    expect(items.find((item) => item.id === 'video-1')).toBeUndefined();
+    expect(items.find((item) => item.id === 'audio-1')).toBeUndefined();
+    expect(items.find((item) => item.id === 'video-2')).toMatchObject({ from: 30 });
+    expect(items.find((item) => item.id === 'audio-2')).toMatchObject({ from: 30 });
+    expect(useKeyframesStore.getState().getKeyframesForItem('audio-1')).toBeUndefined();
+  });
+
+  it('ripple delete keeps downstream linked clips aligned across tracks', () => {
+    useItemsStore.getState().setItems([
+      makeVideoItem({
+        id: 'video-delete',
+        durationInFrames: 60,
+        linkedGroupId: undefined,
+        originId: 'origin-delete',
+        mediaId: 'media-delete',
+      }),
+      makeVideoItem({
+        id: 'video-2',
+        from: 90,
+        linkedGroupId: 'group-2',
+        originId: 'origin-2',
+        mediaId: 'media-2',
+      }),
+      makeAudioItem({
+        id: 'audio-2',
+        from: 90,
+        linkedGroupId: 'group-2',
+        originId: 'origin-2',
+        mediaId: 'media-2',
+      }),
+    ]);
+
+    rippleDeleteItems(['video-delete']);
+
+    const items = useItemsStore.getState().items;
+    expect(items.find((item) => item.id === 'video-2')).toMatchObject({ from: 30 });
+    expect(items.find((item) => item.id === 'audio-2')).toMatchObject({ from: 30 });
+  });
+
+  it('close gap moves linked clips on companion tracks', () => {
+    useItemsStore.getState().setItems([
+      makeVideoItem({
+        id: 'video-anchor',
+        durationInFrames: 60,
+        linkedGroupId: undefined,
+        originId: 'origin-anchor',
+        mediaId: 'media-anchor',
+      }),
+      makeVideoItem({
+        id: 'video-2',
+        from: 90,
+        linkedGroupId: 'group-2',
+        originId: 'origin-2',
+        mediaId: 'media-2',
+      }),
+      makeAudioItem({
+        id: 'audio-2',
+        from: 90,
+        linkedGroupId: 'group-2',
+        originId: 'origin-2',
+        mediaId: 'media-2',
+      }),
+    ]);
+
+    closeGapAtPosition('video-track', 75);
+
+    const items = useItemsStore.getState().items;
+    expect(items.find((item) => item.id === 'video-2')).toMatchObject({ from: 60 });
+    expect(items.find((item) => item.id === 'audio-2')).toMatchObject({ from: 60 });
+  });
+
+  it('close all gaps keeps linked clips aligned across tracks', () => {
+    useItemsStore.getState().setItems([
+      makeVideoItem({
+        id: 'video-1',
+        from: 10,
+        durationInFrames: 30,
+        linkedGroupId: 'group-1',
+        originId: 'origin-1',
+      }),
+      makeAudioItem({
+        id: 'audio-1',
+        from: 10,
+        durationInFrames: 30,
+        linkedGroupId: 'group-1',
+        originId: 'origin-1',
+      }),
+      makeVideoItem({
+        id: 'video-2',
+        from: 60,
+        durationInFrames: 30,
+        linkedGroupId: 'group-2',
+        originId: 'origin-2',
+        mediaId: 'media-2',
+      }),
+      makeAudioItem({
+        id: 'audio-2',
+        from: 60,
+        durationInFrames: 30,
+        linkedGroupId: 'group-2',
+        originId: 'origin-2',
+        mediaId: 'media-2',
+      }),
+    ]);
+
+    closeAllGapsOnTrack('video-track');
+
+    const items = useItemsStore.getState().items;
+    expect(items.find((item) => item.id === 'video-1')).toMatchObject({ from: 0 });
+    expect(items.find((item) => item.id === 'audio-1')).toMatchObject({ from: 0 });
+    expect(items.find((item) => item.id === 'video-2')).toMatchObject({ from: 30 });
+    expect(items.find((item) => item.id === 'audio-2')).toMatchObject({ from: 30 });
   });
 
   it('links an eligible audio/video pair with a fresh group id', () => {
