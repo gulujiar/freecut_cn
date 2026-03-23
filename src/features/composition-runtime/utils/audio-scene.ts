@@ -45,6 +45,10 @@ export interface AudioSegment {
   muted: boolean;
   audioFadeIn: number;
   audioFadeOut: number;
+  audioFadeInCurve: number;
+  audioFadeOutCurve: number;
+  audioFadeInCurveX: number;
+  audioFadeOutCurveX: number;
 }
 
 export interface VideoAudioSegment extends AudioSegment {
@@ -174,6 +178,10 @@ export function buildStandaloneAudioSegments(
       muted: item.muted || !item.trackVisible,
       audioFadeIn: item.audioFadeIn ?? 0,
       audioFadeOut: item.audioFadeOut ?? 0,
+      audioFadeInCurve: item.audioFadeInCurve ?? 0,
+      audioFadeOutCurve: item.audioFadeOutCurve ?? 0,
+      audioFadeInCurveX: item.audioFadeInCurveX ?? 0.52,
+      audioFadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
     });
   }
 
@@ -195,6 +203,8 @@ export function buildStandaloneAudioSegments(
     if (canMerge) {
       active.durationInFrames = (segment.from + segment.durationInFrames) - active.from;
       active.audioFadeOut = segment.audioFadeOut;
+      active.audioFadeOutCurve = segment.audioFadeOutCurve;
+      active.audioFadeOutCurveX = segment.audioFadeOutCurveX;
       active.clip = segment.clip;
       continue;
     }
@@ -213,6 +223,10 @@ export function buildStandaloneAudioSegments(
       muted: active.muted,
       audioFadeIn: active.audioFadeIn,
       audioFadeOut: active.audioFadeOut,
+      audioFadeInCurve: active.audioFadeInCurve,
+      audioFadeOutCurve: active.audioFadeOutCurve,
+      audioFadeInCurveX: active.audioFadeInCurveX,
+      audioFadeOutCurveX: active.audioFadeOutCurveX,
     });
     active = { ...segment };
   }
@@ -232,6 +246,10 @@ export function buildStandaloneAudioSegments(
       muted: active.muted,
       audioFadeIn: active.audioFadeIn,
       audioFadeOut: active.audioFadeOut,
+      audioFadeInCurve: active.audioFadeInCurve,
+      audioFadeOutCurve: active.audioFadeOutCurve,
+      audioFadeInCurveX: active.audioFadeInCurveX,
+      audioFadeOutCurveX: active.audioFadeOutCurveX,
     });
   }
 
@@ -328,6 +346,10 @@ export function buildTransitionVideoAudioSegments(
       muted: item.muted || !item.trackVisible,
       audioFadeIn: crossfadeFadeIn === undefined ? (item.audioFadeIn ?? 0) : 0,
       audioFadeOut: crossfadeFadeOut === undefined ? (item.audioFadeOut ?? 0) : 0,
+      audioFadeInCurve: item.audioFadeInCurve ?? 0,
+      audioFadeOutCurve: item.audioFadeOutCurve ?? 0,
+      audioFadeInCurveX: item.audioFadeInCurveX ?? 0.52,
+      audioFadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
       crossfadeFadeIn,
       crossfadeFadeOut,
       beforeFrames: before,
@@ -358,6 +380,8 @@ export function buildTransitionVideoAudioSegments(
     if (canMerge) {
       active.durationInFrames = (segment.from + segment.durationInFrames) - active.from;
       active.audioFadeOut = segment.audioFadeOut;
+      active.audioFadeOutCurve = segment.audioFadeOutCurve;
+      active.audioFadeOutCurveX = segment.audioFadeOutCurveX;
       active.crossfadeFadeOut = segment.crossfadeFadeOut;
       active.clip = segment.clip;
       active.afterFrames = segment.afterFrames;
@@ -378,6 +402,10 @@ export function buildTransitionVideoAudioSegments(
       muted: active.muted,
       audioFadeIn: active.audioFadeIn,
       audioFadeOut: active.audioFadeOut,
+      audioFadeInCurve: active.audioFadeInCurve,
+      audioFadeOutCurve: active.audioFadeOutCurve,
+      audioFadeInCurveX: active.audioFadeInCurveX,
+      audioFadeOutCurveX: active.audioFadeOutCurveX,
       crossfadeFadeIn: active.crossfadeFadeIn,
       crossfadeFadeOut: active.crossfadeFadeOut,
     });
@@ -399,6 +427,10 @@ export function buildTransitionVideoAudioSegments(
       muted: active.muted,
       audioFadeIn: active.audioFadeIn,
       audioFadeOut: active.audioFadeOut,
+      audioFadeInCurve: active.audioFadeInCurve,
+      audioFadeOutCurve: active.audioFadeOutCurve,
+      audioFadeInCurveX: active.audioFadeInCurveX,
+      audioFadeOutCurveX: active.audioFadeOutCurveX,
       crossfadeFadeIn: active.crossfadeFadeIn,
       crossfadeFadeOut: active.crossfadeFadeOut,
     });

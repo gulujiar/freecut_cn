@@ -11,6 +11,7 @@ import { useCompositionsStore, type SubComposition } from '../compositions-store
 import { useSelectionStore } from '@/shared/state/selection';
 import { DEFAULT_TRACK_HEIGHT } from '../../constants';
 import { useCompositionNavigationStore } from '../composition-navigation-store';
+import { useProjectStore } from '@/features/timeline/deps/projects';
 import { execute } from './shared';
 
 /**
@@ -46,11 +47,11 @@ export function createPreComp(name?: string, itemIds?: string[]): CompositionIte
     const durationInFrames = maxEnd - minFrom;
 
     // --- 2. Determine canvas dimensions from project settings ---
-    // Use the same canvas size as the project for the sub-composition
-    // (Could be refined later to compute tight bounding box from transforms)
-    // Get the project canvas dimensions from video config or default
-    const width = 1920;
-    const height = 1080;
+    // Compound/pre-comp timelines should inherit the current project canvas.
+    const projectMetadata = useProjectStore.getState().currentProject?.metadata;
+    const width = projectMetadata?.width ?? 1920;
+    const height = projectMetadata?.height ?? 1080;
+    const backgroundColor = projectMetadata?.backgroundColor;
 
     // --- 3. Collect distinct source tracks and build sub-comp tracks ---
     const selectedItemIds = new Set(selectedIds);
@@ -117,7 +118,7 @@ export function createPreComp(name?: string, itemIds?: string[]): CompositionIte
 
     // --- 7. Create SubComposition ---
     const compositionId = crypto.randomUUID();
-    const compName = name ?? `Pre-Comp ${useCompositionsStore.getState().compositions.length + 1}`;
+    const compName = name ?? `Compound Clip ${useCompositionsStore.getState().compositions.length + 1}`;
     const subComp: SubComposition = {
       id: compositionId,
       name: compName,
@@ -129,6 +130,7 @@ export function createPreComp(name?: string, itemIds?: string[]): CompositionIte
       width,
       height,
       durationInFrames,
+      backgroundColor,
     };
 
     useCompositionsStore.getState().addComposition(subComp);

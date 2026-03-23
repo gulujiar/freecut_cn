@@ -30,6 +30,8 @@ import { ClipContent } from './clip-content';
 import { ClipIndicators } from './clip-indicators';
 import { TrimHandles } from './trim-handles';
 import { StretchHandles } from './stretch-handles';
+import { AudioFadeHandles } from './audio-fade-handles';
+import { AudioVolumeControl } from './audio-volume-control';
 import { JoinIndicators } from './join-indicators';
 import { SegmentStatusOverlays } from './segment-status-overlays';
 import { AnchorDragGhost, FollowerDragGhost } from './drag-ghosts';
@@ -58,11 +60,18 @@ import type { MediaTranscriptModel } from '@/types/storage';
 import { WHISPER_MODEL_LABELS } from '@/shared/utils/whisper-settings';
 import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
 import { getTranscriptionOverallPercent } from '@/shared/utils/transcription-progress';
+import { getAudioFadePixels, getAudioFadeSecondsFromOffset, type AudioFadeHandle } from '../../utils/audio-fade';
+import { getAudioFadeCurveControlPoint, getAudioFadeCurveFromOffset } from '../../utils/audio-fade-curve';
+import { getAudioVolumeDbFromOffset, getAudioVisualizationScale, getAudioVolumeLineY } from '../../utils/audio-volume';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 const CAPTION_GENERATION_OVERLAY_ID = 'caption-generation';
 const EMPTY_SEGMENT_OVERLAYS = [] as const;
 
 // Width in pixels for edge hover detection (trim/rate-stretch handles)
 const EDGE_HOVER_ZONE = 8;
+const AUDIO_FADE_EPSILON = 0.0001;
+const AUDIO_VOLUME_EPSILON = 0.05;
+const AUDIO_ENVELOPE_VIEWBOX_HEIGHT = 100;
 
 interface TimelineItemProps {
   item: TimelineItemType;
@@ -396,6 +405,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Get FPS for frame-to-time conversion
   const fps = useTimelineStore((s) => s.fps);
+  const updateTimelineItem = useTimelineStore((s) => s.updateItem);
 
   // Committed transition overlap for this item (store-indexed lookup).
   // right: this item is LEFT in a transition, left: this item is RIGHT.
@@ -1233,6 +1243,498 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Composition operations
   const isCompositionItem = item.type === 'composition';
   const isInsideSubComp = useCompositionNavigationStore((s) => s.activeCompositionId !== null);
+  const [audioFadeEdit, setAudioFadeEdit] = useState<{
+    handle: AudioFadeHandle;
+    previewFadeIn: number;
+    previewFadeOut: number;
+    originalFadeIn: number;
+    originalFadeOut: number;
+    isCommitting: boolean;
+  } | null>(null);
+  const audioFadeEditRef = useRef(audioFadeEdit);
+  audioFadeEditRef.current = audioFadeEdit;
+  const audioFadeCleanupRef = useRef<(() => void) | null>(null);
+  const [audioFadeCurveEdit, setAudioFadeCurveEdit] = useState<{
+    handle: AudioFadeHandle;
+    previewFadeInCurve: number;
+    previewFadeOutCurve: number;
+    previewFadeInCurveX: number;
+    previewFadeOutCurveX: number;
+    originalFadeInCurve: number;
+    originalFadeOutCurve: number;
+    originalFadeInCurveX: number;
+    originalFadeOutCurveX: number;
+    isCommitting: boolean;
+  } | null>(null);
+  const audioFadeCurveEditRef = useRef(audioFadeCurveEdit);
+  audioFadeCurveEditRef.current = audioFadeCurveEdit;
+  const audioFadeCurveCleanupRef = useRef<(() => void) | null>(null);
+  const [audioVolumeEdit, setAudioVolumeEdit] = useState<{
+    previewVolume: number;
+    originalVolume: number;
+    isCommitting: boolean;
+  } | null>(null);
+  const audioVolumeEditRef = useRef(audioVolumeEdit);
+  audioVolumeEditRef.current = audioVolumeEdit;
+  const audioVolumeCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => {
+    audioFadeCleanupRef.current?.();
+    audioFadeCurveCleanupRef.current?.();
+    audioVolumeCleanupRef.current?.();
+  }, []);
+  const displayedAudioFadeIn = item.type === 'audio'
+    ? (audioFadeEdit?.previewFadeIn ?? item.audioFadeIn ?? 0)
+    : 0;
+  const displayedAudioFadeOut = item.type === 'audio'
+    ? (audioFadeEdit?.previewFadeOut ?? item.audioFadeOut ?? 0)
+    : 0;
+  const displayedAudioFadeInCurve = item.type === 'audio'
+    ? (audioFadeCurveEdit?.previewFadeInCurve ?? item.audioFadeInCurve ?? 0)
+    : 0;
+  const displayedAudioFadeOutCurve = item.type === 'audio'
+    ? (audioFadeCurveEdit?.previewFadeOutCurve ?? item.audioFadeOutCurve ?? 0)
+    : 0;
+  const displayedAudioFadeInCurveX = item.type === 'audio'
+    ? (audioFadeCurveEdit?.previewFadeInCurveX ?? item.audioFadeInCurveX ?? 0.52)
+    : 0.52;
+  const displayedAudioFadeOutCurveX = item.type === 'audio'
+    ? (audioFadeCurveEdit?.previewFadeOutCurveX ?? item.audioFadeOutCurveX ?? 0.52)
+    : 0.52;
+  const displayedAudioVolumeDb = item.type === 'audio'
+    ? (audioVolumeEdit?.previewVolume ?? item.volume ?? 0)
+    : 0;
+  const audioFadeInPixels = useMemo(
+    () => item.type === 'audio' ? getAudioFadePixels(displayedAudioFadeIn, fps, frameToPixels, visualWidth) : 0,
+    [displayedAudioFadeIn, fps, frameToPixels, item.type, visualWidth]
+  );
+  const audioFadeOutPixels = useMemo(
+    () => item.type === 'audio' ? getAudioFadePixels(displayedAudioFadeOut, fps, frameToPixels, visualWidth) : 0,
+    [displayedAudioFadeOut, fps, frameToPixels, item.type, visualWidth]
+  );
+  const audioFadeEditLabel = useMemo(() => {
+    if (!audioFadeEdit) return null;
+    const seconds = audioFadeEdit.handle === 'in'
+      ? audioFadeEdit.previewFadeIn
+      : audioFadeEdit.previewFadeOut;
+    return `${audioFadeEdit.handle === 'in' ? 'Fade In' : 'Fade Out'} ${seconds.toFixed(2)}s`;
+  }, [audioFadeEdit]);
+  const audioFadeInHoverLabel = useMemo(
+    () => `Fade In ${displayedAudioFadeIn.toFixed(2)}s`,
+    [displayedAudioFadeIn]
+  );
+  const audioFadeOutHoverLabel = useMemo(
+    () => `Fade Out ${displayedAudioFadeOut.toFixed(2)}s`,
+    [displayedAudioFadeOut]
+  );
+  const audioFadeCurveEditLabel = useMemo(() => {
+    if (!audioFadeCurveEdit) return null;
+    const curve = audioFadeCurveEdit.handle === 'in'
+      ? audioFadeCurveEdit.previewFadeInCurve
+      : audioFadeCurveEdit.previewFadeOutCurve;
+    const curveX = audioFadeCurveEdit.handle === 'in'
+      ? audioFadeCurveEdit.previewFadeInCurveX
+      : audioFadeCurveEdit.previewFadeOutCurveX;
+    return `Curve ${curve.toFixed(2)} / X ${curveX.toFixed(2)}`;
+  }, [audioFadeCurveEdit]);
+  const audioVolumeEditLabel = useMemo(() => {
+    if (!audioVolumeEdit) return null;
+    return `Volume ${displayedAudioVolumeDb >= 0 ? '+' : ''}${displayedAudioVolumeDb.toFixed(1)} dB`;
+  }, [audioVolumeEdit, displayedAudioVolumeDb]);
+  const audioVolumeLineY = useMemo(
+    () => item.type === 'audio' ? getAudioVolumeLineY(displayedAudioVolumeDb, AUDIO_ENVELOPE_VIEWBOX_HEIGHT) : AUDIO_ENVELOPE_VIEWBOX_HEIGHT / 2,
+    [displayedAudioVolumeDb, item.type]
+  );
+  const audioVisualizationScale = useMemo(
+    () => item.type === 'audio' ? getAudioVisualizationScale(displayedAudioVolumeDb) : 1,
+    [displayedAudioVolumeDb, item.type]
+  );
+  const audioVolumeLineYPercent = useMemo(
+    () => (audioVolumeLineY / AUDIO_ENVELOPE_VIEWBOX_HEIGHT) * 100,
+    [audioVolumeLineY]
+  );
+  const audioFadeInCurvePoint = useMemo(
+    () => getAudioFadeCurveControlPoint({
+      handle: 'in',
+      fadePixels: audioFadeInPixels,
+      clipWidthPixels: visualWidth,
+      curve: displayedAudioFadeInCurve,
+      curveX: displayedAudioFadeInCurveX,
+    }),
+    [audioFadeInPixels, displayedAudioFadeInCurve, displayedAudioFadeInCurveX, visualWidth]
+  );
+  const audioFadeOutCurvePoint = useMemo(
+    () => getAudioFadeCurveControlPoint({
+      handle: 'out',
+      fadePixels: audioFadeOutPixels,
+      clipWidthPixels: visualWidth,
+      curve: displayedAudioFadeOutCurve,
+      curveX: displayedAudioFadeOutCurveX,
+    }),
+    [audioFadeOutPixels, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX, visualWidth]
+  );
+  const audioControlsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!audioFadeEdit?.isCommitting || item.type !== 'audio') {
+      return;
+    }
+
+    const committedFade = audioFadeEdit.handle === 'in'
+      ? (item.audioFadeIn ?? 0)
+      : (item.audioFadeOut ?? 0);
+    const previewFade = audioFadeEdit.handle === 'in'
+      ? audioFadeEdit.previewFadeIn
+      : audioFadeEdit.previewFadeOut;
+
+    if (Math.abs(committedFade - previewFade) <= AUDIO_FADE_EPSILON) {
+      setAudioFadeEdit(null);
+    }
+  }, [audioFadeEdit, item]);
+  useEffect(() => {
+    if (!audioVolumeEdit?.isCommitting || item.type !== 'audio') {
+      return;
+    }
+
+    if (Math.abs((item.volume ?? 0) - audioVolumeEdit.previewVolume) <= AUDIO_VOLUME_EPSILON) {
+      setAudioVolumeEdit(null);
+    }
+  }, [audioVolumeEdit, item]);
+  useEffect(() => {
+    if (!audioFadeCurveEdit?.isCommitting || item.type !== 'audio') {
+      return;
+    }
+
+    const committedCurve = audioFadeCurveEdit.handle === 'in'
+      ? (item.audioFadeInCurve ?? 0)
+      : (item.audioFadeOutCurve ?? 0);
+    const previewCurve = audioFadeCurveEdit.handle === 'in'
+      ? audioFadeCurveEdit.previewFadeInCurve
+      : audioFadeCurveEdit.previewFadeOutCurve;
+    const committedCurveX = audioFadeCurveEdit.handle === 'in'
+      ? (item.audioFadeInCurveX ?? 0.52)
+      : (item.audioFadeOutCurveX ?? 0.52);
+    const previewCurveX = audioFadeCurveEdit.handle === 'in'
+      ? audioFadeCurveEdit.previewFadeInCurveX
+      : audioFadeCurveEdit.previewFadeOutCurveX;
+
+    if (Math.abs(committedCurve - previewCurve) <= AUDIO_FADE_EPSILON && Math.abs(committedCurveX - previewCurveX) <= AUDIO_FADE_EPSILON) {
+      setAudioFadeCurveEdit(null);
+    }
+  }, [audioFadeCurveEdit, item]);
+  const handleAudioFadeHandleMouseDown = useCallback((e: React.MouseEvent, handle: AudioFadeHandle) => {
+    if (item.type !== 'audio' || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const originalFadeIn = displayedAudioFadeIn;
+    const originalFadeOut = displayedAudioFadeOut;
+    const persistedFadeIn = item.audioFadeIn ?? 0;
+    const persistedFadeOut = item.audioFadeOut ?? 0;
+    const computeFadeSeconds = (clientX: number) => {
+      const rect = audioControlsRef.current?.getBoundingClientRect() ?? transformRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return handle === 'in' ? originalFadeIn : originalFadeOut;
+      }
+
+      return getAudioFadeSecondsFromOffset({
+        handle,
+        clipWidthPixels: rect.width,
+        pointerOffsetPixels: clientX - rect.left,
+        fps,
+        maxDurationFrames: item.durationInFrames,
+        pixelsToFrame,
+      });
+    };
+
+    const applyPreview = (nextFadeSeconds: number) => {
+      setAudioFadeEdit({
+        handle,
+        previewFadeIn: handle === 'in' ? nextFadeSeconds : originalFadeIn,
+        previewFadeOut: handle === 'out' ? nextFadeSeconds : originalFadeOut,
+        originalFadeIn,
+        originalFadeOut,
+        isCommitting: false,
+      });
+    };
+
+    const finishEdit = () => {
+      const latestState = audioFadeEditRef.current;
+      const committedFade = handle === 'in'
+        ? (latestState?.previewFadeIn ?? originalFadeIn)
+        : (latestState?.previewFadeOut ?? originalFadeOut);
+      audioFadeCleanupRef.current?.();
+      audioFadeCleanupRef.current = null;
+
+      if (handle === 'in') {
+        if (Math.abs(committedFade - persistedFadeIn) > AUDIO_FADE_EPSILON) {
+          setAudioFadeEdit((prev) => prev ? { ...prev, isCommitting: true } : prev);
+          updateTimelineItem(item.id, { audioFadeIn: committedFade });
+        } else {
+          setAudioFadeEdit(null);
+        }
+      } else if (Math.abs(committedFade - persistedFadeOut) > AUDIO_FADE_EPSILON) {
+        setAudioFadeEdit((prev) => prev ? { ...prev, isCommitting: true } : prev);
+        updateTimelineItem(item.id, { audioFadeOut: committedFade });
+      } else {
+        setAudioFadeEdit(null);
+      }
+    };
+
+    applyPreview(computeFadeSeconds(e.clientX));
+
+    const handleWindowMouseMove = (event: MouseEvent) => {
+      applyPreview(computeFadeSeconds(event.clientX));
+    };
+    const handleWindowMouseUp = () => {
+      finishEdit();
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp, { once: true });
+    audioFadeCleanupRef.current = () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [activeTool, displayedAudioFadeIn, displayedAudioFadeOut, fps, item, pixelsToFrame, trackLocked, updateTimelineItem]);
+  const handleAudioFadeCurveDotMouseDown = useCallback((e: React.MouseEvent, handle: AudioFadeHandle) => {
+    if (item.type !== 'audio' || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
+      return;
+    }
+
+    const fadePixels = handle === 'in' ? audioFadeInPixels : audioFadeOutPixels;
+    if (fadePixels <= 0) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const originalFadeInCurve = displayedAudioFadeInCurve;
+    const originalFadeOutCurve = displayedAudioFadeOutCurve;
+    const originalFadeInCurveX = displayedAudioFadeInCurveX;
+    const originalFadeOutCurveX = displayedAudioFadeOutCurveX;
+    const persistedFadeInCurve = item.audioFadeInCurve ?? 0;
+    const persistedFadeOutCurve = item.audioFadeOutCurve ?? 0;
+    const persistedFadeInCurveX = item.audioFadeInCurveX ?? 0.52;
+    const persistedFadeOutCurveX = item.audioFadeOutCurveX ?? 0.52;
+
+    const computeCurve = (clientX: number, clientY: number) => {
+      const rect = audioControlsRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return {
+          curve: handle === 'in' ? originalFadeInCurve : originalFadeOutCurve,
+          curveX: handle === 'in' ? originalFadeInCurveX : originalFadeOutCurveX,
+        };
+      }
+
+      return getAudioFadeCurveFromOffset({
+        handle,
+        pointerOffsetX: clientX - rect.left,
+        pointerOffsetY: clientY - rect.top,
+        fadePixels,
+        clipWidthPixels: rect.width,
+        rowHeight: rect.height,
+      });
+    };
+
+    const applyPreview = (next: { curve: number; curveX: number }) => {
+      setAudioFadeCurveEdit({
+        handle,
+        previewFadeInCurve: handle === 'in' ? next.curve : originalFadeInCurve,
+        previewFadeOutCurve: handle === 'out' ? next.curve : originalFadeOutCurve,
+        previewFadeInCurveX: handle === 'in' ? next.curveX : originalFadeInCurveX,
+        previewFadeOutCurveX: handle === 'out' ? next.curveX : originalFadeOutCurveX,
+        originalFadeInCurve,
+        originalFadeOutCurve,
+        originalFadeInCurveX,
+        originalFadeOutCurveX,
+        isCommitting: false,
+      });
+    };
+
+    const finishEdit = () => {
+      const latestState = audioFadeCurveEditRef.current;
+      const committedCurve = handle === 'in'
+        ? (latestState?.previewFadeInCurve ?? originalFadeInCurve)
+        : (latestState?.previewFadeOutCurve ?? originalFadeOutCurve);
+      const committedCurveX = handle === 'in'
+        ? (latestState?.previewFadeInCurveX ?? originalFadeInCurveX)
+        : (latestState?.previewFadeOutCurveX ?? originalFadeOutCurveX);
+      audioFadeCurveCleanupRef.current?.();
+      audioFadeCurveCleanupRef.current = null;
+
+      if (handle === 'in') {
+        if (
+          Math.abs(committedCurve - persistedFadeInCurve) > AUDIO_FADE_EPSILON
+          || Math.abs(committedCurveX - persistedFadeInCurveX) > AUDIO_FADE_EPSILON
+        ) {
+          setAudioFadeCurveEdit((prev) => prev ? { ...prev, isCommitting: true } : prev);
+          updateTimelineItem(item.id, { audioFadeInCurve: committedCurve, audioFadeInCurveX: committedCurveX });
+        } else {
+          setAudioFadeCurveEdit(null);
+        }
+      } else if (
+        Math.abs(committedCurve - persistedFadeOutCurve) > AUDIO_FADE_EPSILON
+        || Math.abs(committedCurveX - persistedFadeOutCurveX) > AUDIO_FADE_EPSILON
+      ) {
+        setAudioFadeCurveEdit((prev) => prev ? { ...prev, isCommitting: true } : prev);
+        updateTimelineItem(item.id, { audioFadeOutCurve: committedCurve, audioFadeOutCurveX: committedCurveX });
+      } else {
+        setAudioFadeCurveEdit(null);
+      }
+    };
+
+    applyPreview(computeCurve(e.clientX, e.clientY));
+
+    const handleWindowMouseMove = (event: MouseEvent) => {
+      applyPreview(computeCurve(event.clientX, event.clientY));
+    };
+    const handleWindowMouseUp = () => {
+      finishEdit();
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp, { once: true });
+    audioFadeCurveCleanupRef.current = () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [
+    activeTool,
+    audioFadeInPixels,
+    audioFadeOutPixels,
+    displayedAudioFadeInCurve,
+    displayedAudioFadeInCurveX,
+    displayedAudioFadeOutCurve,
+    displayedAudioFadeOutCurveX,
+    item,
+    trackLocked,
+    updateTimelineItem,
+  ]);
+  const handleAudioVolumeMouseDown = useCallback((e: React.MouseEvent) => {
+    if (item.type !== 'audio' || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const originalVolume = item.volume ?? 0;
+    const computeVolumeDb = (clientY: number) => {
+      const rect = audioControlsRef.current?.getBoundingClientRect();
+      if (!rect) {
+        return originalVolume;
+      }
+
+      return getAudioVolumeDbFromOffset(clientY - rect.top, rect.height);
+    };
+
+    const applyPreview = (nextVolume: number) => {
+      setAudioVolumeEdit({
+        previewVolume: nextVolume,
+        originalVolume,
+        isCommitting: false,
+      });
+    };
+
+    const finishEdit = () => {
+      const committedVolume = audioVolumeEditRef.current?.previewVolume ?? originalVolume;
+      audioVolumeCleanupRef.current?.();
+      audioVolumeCleanupRef.current = null;
+
+      if (Math.abs(committedVolume - originalVolume) > AUDIO_VOLUME_EPSILON) {
+        setAudioVolumeEdit((prev) => prev ? { ...prev, isCommitting: true } : prev);
+        updateTimelineItem(item.id, { volume: committedVolume });
+      } else {
+        setAudioVolumeEdit(null);
+      }
+    };
+
+    applyPreview(computeVolumeDb(e.clientY));
+
+    const handleWindowMouseMove = (event: MouseEvent) => {
+      applyPreview(computeVolumeDb(event.clientY));
+    };
+    const handleWindowMouseUp = () => {
+      finishEdit();
+    };
+
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    window.addEventListener('mouseup', handleWindowMouseUp, { once: true });
+    audioVolumeCleanupRef.current = () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+      window.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [activeTool, item, trackLocked, updateTimelineItem]);
+  const handleAudioVolumeDoubleClick = useCallback(() => {
+    if (item.type !== 'audio' || trackLocked) {
+      return;
+    }
+
+    audioVolumeCleanupRef.current?.();
+    audioVolumeCleanupRef.current = null;
+    setAudioVolumeEdit(null);
+
+    if (Math.abs((item.volume ?? 0)) > AUDIO_VOLUME_EPSILON) {
+      updateTimelineItem(item.id, { volume: 0 });
+    }
+  }, [item, trackLocked, updateTimelineItem]);
+  const handleAudioFadeHandleDoubleClick = useCallback((handle: AudioFadeHandle) => {
+    if (item.type !== 'audio' || trackLocked) {
+      return;
+    }
+
+    audioFadeCleanupRef.current?.();
+    audioFadeCleanupRef.current = null;
+    setAudioFadeEdit(null);
+
+    if (handle === 'in') {
+      if ((item.audioFadeIn ?? 0) > AUDIO_FADE_EPSILON) {
+        updateTimelineItem(item.id, { audioFadeIn: 0 });
+      }
+      return;
+    }
+
+    if ((item.audioFadeOut ?? 0) > AUDIO_FADE_EPSILON) {
+      updateTimelineItem(item.id, { audioFadeOut: 0 });
+    }
+  }, [item, trackLocked, updateTimelineItem]);
+  const handleAudioFadeCurveDotDoubleClick = useCallback((handle: AudioFadeHandle) => {
+    if (item.type !== 'audio' || trackLocked) {
+      return;
+    }
+
+    audioFadeCurveCleanupRef.current?.();
+    audioFadeCurveCleanupRef.current = null;
+    setAudioFadeCurveEdit(null);
+
+    if (handle === 'in') {
+      if (Math.abs(item.audioFadeInCurve ?? 0) > AUDIO_FADE_EPSILON || Math.abs((item.audioFadeInCurveX ?? 0.52) - 0.52) > AUDIO_FADE_EPSILON) {
+        updateTimelineItem(item.id, { audioFadeInCurve: 0, audioFadeInCurveX: 0.52 });
+      }
+      return;
+    }
+
+    if (Math.abs(item.audioFadeOutCurve ?? 0) > AUDIO_FADE_EPSILON || Math.abs((item.audioFadeOutCurveX ?? 0.52) - 0.52) > AUDIO_FADE_EPSILON) {
+      updateTimelineItem(item.id, { audioFadeOutCurve: 0, audioFadeOutCurveX: 0.52 });
+    }
+  }, [item, trackLocked, updateTimelineItem]);
+  const contentVisualPreviewItem = useMemo<TimelineItemType>(() => {
+    if (contentPreviewItem.type !== 'audio') {
+      return contentPreviewItem;
+    }
+
+    if (audioVolumeEdit === null) {
+      return contentPreviewItem;
+    }
+
+    return {
+      ...contentPreviewItem,
+      volume: audioVolumeEdit.previewVolume,
+    };
+  }, [audioVolumeEdit, contentPreviewItem]);
 
   const handleCreatePreComp = useCallback(() => {
     // Capture selection synchronously â€” context menu close may clear it before the dynamic import resolves
@@ -1346,7 +1848,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           ref={transformRef}
           data-item-id={item.id}
           className={cn(
-            "absolute inset-y-px rounded overflow-visible",
+            "absolute inset-y-px rounded overflow-visible group/timeline-item",
             itemColorClasses,
             cursorClass,
             !isBeingDragged && !isStretching && !trackLocked && 'hover:brightness-110'
@@ -1380,11 +1882,60 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           <div className="absolute inset-px rounded-[3px] overflow-hidden">
             <SegmentStatusOverlays overlays={segmentOverlays} />
 
+            {item.type === 'audio' && (
+              <div
+                ref={audioControlsRef}
+                className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
+                style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
+              >
+                <svg
+                  className="absolute inset-0 h-full w-full"
+                  viewBox={`0 0 ${Math.max(1, visualWidth)} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
+                  preserveAspectRatio="none"
+                >
+                  <line
+                    x1="0"
+                    y1={audioVolumeLineY}
+                    x2={visualWidth}
+                    y2={audioVolumeLineY}
+                    stroke="rgba(255,255,255,0.95)"
+                    strokeWidth="1"
+                    vectorEffect="non-scaling-stroke"
+                    strokeLinecap="round"
+                  />
+                  {audioFadeInPixels > 0 && (
+                    <>
+                      <path
+                        d={`M 0 100 Q ${audioFadeInCurvePoint.x} ${audioFadeInCurvePoint.y} ${audioFadeInPixels} 0 L ${audioFadeInPixels} 100 Z`}
+                        fill="rgba(0,0,0,0.18)"
+                      />
+                      <path
+                        d={`M 0 0 L ${audioFadeInPixels} 0 Q ${audioFadeInCurvePoint.x} ${audioFadeInCurvePoint.y} 0 100 Z`}
+                        fill="rgba(255,255,255,0.08)"
+                      />
+                    </>
+                  )}
+                  {audioFadeOutPixels > 0 && (
+                    <>
+                      <path
+                        d={`M ${Math.max(0, visualWidth - audioFadeOutPixels)} 100 L ${visualWidth} 100 Q ${audioFadeOutCurvePoint.x} ${audioFadeOutCurvePoint.y} ${Math.max(0, visualWidth - audioFadeOutPixels)} 0 Z`}
+                        fill="rgba(0,0,0,0.18)"
+                      />
+                      <path
+                        d={`M ${Math.max(0, visualWidth - audioFadeOutPixels)} 0 Q ${audioFadeOutCurvePoint.x} ${audioFadeOutCurvePoint.y} ${visualWidth} 100 L ${visualWidth} 0 Z`}
+                        fill="rgba(255,255,255,0.08)"
+                      />
+                    </>
+                  )}
+                </svg>
+              </div>
+            )}
+
             {/* Clip visual content â€” offset when left-trimmed so filmstrip aligns correctly */}
             {overlapLeftPixels > 0 ? (
               <div className="absolute inset-0" style={{ left: -overlapLeftPixels, width: previewFullWidthPixels }}>
                 <ClipContent
-                  item={contentPreviewItem}
+                  item={contentVisualPreviewItem}
                   clipWidth={previewFullWidthPixels}
                   fps={fps}
                   isClipVisible={clipVisibility.isVisible}
@@ -1392,11 +1943,12 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                   visibleEndRatio={clipVisibility.visibleEndRatio}
                   pixelsPerSecond={pixelsPerSecond}
                   preferImmediateRendering={preferImmediateContentRendering}
+                  audioWaveformScale={audioVisualizationScale}
                 />
               </div>
             ) : (
               <ClipContent
-                item={contentPreviewItem}
+                item={contentVisualPreviewItem}
                 clipWidth={visualWidth}
                 fps={fps}
                 isClipVisible={clipVisibility.isVisible}
@@ -1404,6 +1956,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 visibleEndRatio={clipVisibility.visibleEndRatio}
                 pixelsPerSecond={pixelsPerSecond}
                 preferImmediateRendering={preferImmediateContentRendering}
+                audioWaveformScale={audioVisualizationScale}
               />
             )}
 
@@ -1420,6 +1973,47 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
               isShape={item.type === 'shape'}
             />
           </div>
+
+          {/* Trim handles */}
+          {item.type === 'audio' && (
+            <div
+              className="absolute inset-x-0 bottom-0 z-30"
+              style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
+            >
+              <AudioFadeHandles
+                trackLocked={trackLocked}
+                activeTool={activeTool}
+                clipWidth={visualWidth}
+                lineYPercent={audioVolumeLineYPercent}
+                fadeInPixels={audioFadeInPixels}
+                fadeOutPixels={audioFadeOutPixels}
+                isSelected={isSelected}
+                isEditing={audioFadeEdit !== null}
+                editingHandle={audioFadeEdit?.handle ?? null}
+                curveEditingHandle={audioFadeCurveEdit?.handle ?? null}
+                editLabel={audioFadeEditLabel}
+                curveEditLabel={audioFadeCurveEditLabel}
+                fadeInLabel={audioFadeInHoverLabel}
+                fadeOutLabel={audioFadeOutHoverLabel}
+                fadeInCurveDot={audioFadeInPixels > 0 ? { x: audioFadeInCurvePoint.x, yPercent: audioFadeInCurvePoint.y } : null}
+                fadeOutCurveDot={audioFadeOutPixels > 0 ? { x: audioFadeOutCurvePoint.x, yPercent: audioFadeOutCurvePoint.y } : null}
+                onFadeHandleMouseDown={handleAudioFadeHandleMouseDown}
+                onFadeHandleDoubleClick={handleAudioFadeHandleDoubleClick}
+                onFadeCurveDotMouseDown={handleAudioFadeCurveDotMouseDown}
+                onFadeCurveDotDoubleClick={handleAudioFadeCurveDotDoubleClick}
+              />
+              <AudioVolumeControl
+                trackLocked={trackLocked}
+                activeTool={activeTool}
+                lineYPercent={audioVolumeLineYPercent}
+                isSelected={isSelected}
+                isEditing={audioVolumeEdit !== null}
+                editLabel={audioVolumeEditLabel}
+                onVolumeMouseDown={handleAudioVolumeMouseDown}
+                onVolumeDoubleClick={handleAudioVolumeDoubleClick}
+              />
+            </div>
+          )}
 
           {/* Trim handles */}
           <TrimHandles

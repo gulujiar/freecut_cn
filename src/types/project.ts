@@ -105,6 +105,10 @@ export interface ProjectTimeline {
     volume?: number;
     audioFadeIn?: number;
     audioFadeOut?: number;
+    audioFadeInCurve?: number;
+    audioFadeOutCurve?: number;
+    audioFadeInCurveX?: number;
+    audioFadeOutCurveX?: number;
     // Video properties
     fadeIn?: number;
     fadeOut?: number;

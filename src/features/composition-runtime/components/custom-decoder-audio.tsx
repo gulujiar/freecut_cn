@@ -20,6 +20,10 @@ interface CustomDecoderAudioProps {
   durationInFrames: number;
   audioFadeIn?: number;
   audioFadeOut?: number;
+  audioFadeInCurve?: number;
+  audioFadeOutCurve?: number;
+  audioFadeInCurveX?: number;
+  audioFadeOutCurveX?: number;
   crossfadeFadeIn?: number;
   crossfadeFadeOut?: number;
 }
@@ -255,6 +259,10 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
   durationInFrames,
   audioFadeIn = 0,
   audioFadeOut = 0,
+  audioFadeInCurve = 0,
+  audioFadeOutCurve = 0,
+  audioFadeInCurveX = 0.52,
+  audioFadeOutCurveX = 0.52,
   crossfadeFadeIn,
   crossfadeFadeOut,
 }) => {
@@ -297,6 +305,10 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
       durationInFrames={durationInFrames}
       audioFadeIn={audioFadeIn}
       audioFadeOut={audioFadeOut}
+      audioFadeInCurve={audioFadeInCurve}
+      audioFadeOutCurve={audioFadeOutCurve}
+      audioFadeInCurveX={audioFadeInCurveX}
+      audioFadeOutCurveX={audioFadeOutCurveX}
       crossfadeFadeIn={crossfadeFadeIn}
       crossfadeFadeOut={crossfadeFadeOut}
     />
@@ -322,4 +334,3 @@ export const CustomDecoderAudio: React.FC<CustomDecoderAudioProps> = React.memo(
 
   return <CustomDecoderPitchPreservedAudio {...props} playbackRate={playbackRate} />;
 });
-

@@ -7,6 +7,7 @@ import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
 import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
 import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/composition-runtime/deps/keyframes';
+import { evaluateAudioFadeInCurve, evaluateAudioFadeOutCurve } from '@/shared/utils/audio-fade-curve';
 
 let sharedAudioContext: AudioContext | null = null;
 
@@ -40,6 +41,10 @@ interface PitchCorrectedAudioProps {
   audioFadeIn?: number;
   /** Fade out duration in seconds */
   audioFadeOut?: number;
+  audioFadeInCurve?: number;
+  audioFadeOutCurve?: number;
+  audioFadeInCurveX?: number;
+  audioFadeOutCurveX?: number;
   /** Crossfade fade in duration in FRAMES (for transitions - overrides audioFadeIn) */
   crossfadeFadeIn?: number;
   /** Crossfade fade out duration in FRAMES (for transitions - overrides audioFadeOut) */
@@ -66,6 +71,10 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   durationInFrames,
   audioFadeIn = 0,
   audioFadeOut = 0,
+  audioFadeInCurve = 0,
+  audioFadeOutCurve = 0,
+  audioFadeInCurveX = 0.52,
+  audioFadeOutCurveX = 0.52,
   crossfadeFadeIn,
   crossfadeFadeOut,
 }) => {
@@ -181,18 +190,16 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
           );
         }
       } else if (hasFadeIn) {
-        fadeMultiplier = interpolate(
-          frame,
-          [0, fadeInFrames],
-          [0, 1],
-          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+        fadeMultiplier = evaluateAudioFadeInCurve(
+          frame / fadeInFrames,
+          preview?.audioFadeInCurve ?? audioFadeInCurve,
+          preview?.audioFadeInCurveX ?? audioFadeInCurveX,
         );
       } else {
-        fadeMultiplier = interpolate(
-          frame,
-          [fadeOutStart, durationInFrames],
-          [1, 0],
-          { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+        fadeMultiplier = evaluateAudioFadeOutCurve(
+          (frame - fadeOutStart) / fadeOutFrames,
+          preview?.audioFadeOutCurve ?? audioFadeOutCurve,
+          preview?.audioFadeOutCurveX ?? audioFadeOutCurveX,
         );
       }
     }

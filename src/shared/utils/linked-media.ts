@@ -1,0 +1,53 @@
+import type { AudioItem, TimelineItem, VideoItem } from '@/types/timeline';
+
+function isMediaPair(left: TimelineItem, right: TimelineItem): boolean {
+  return (left.type === 'video' && right.type === 'audio')
+    || (left.type === 'audio' && right.type === 'video');
+}
+
+function isLegacyLinkedPair(anchor: TimelineItem, candidate: TimelineItem): boolean {
+  if (!isMediaPair(anchor, candidate)) return false;
+  if (!anchor.originId || anchor.originId !== candidate.originId) return false;
+  if (!anchor.mediaId || anchor.mediaId !== candidate.mediaId) return false;
+  return anchor.from === candidate.from && anchor.durationInFrames === candidate.durationInFrames;
+}
+
+function isLinkedCompanion(anchor: TimelineItem, candidate: TimelineItem, targetType: TimelineItem['type']): boolean {
+  if (candidate.id === anchor.id || candidate.type !== targetType) return false;
+
+  if (anchor.linkedGroupId && candidate.linkedGroupId) {
+    return anchor.linkedGroupId === candidate.linkedGroupId;
+  }
+
+  return isLegacyLinkedPair(anchor, candidate);
+}
+
+export function getLinkedAudioCompanion(items: TimelineItem[], anchor: TimelineItem): AudioItem | null {
+  if (anchor.type !== 'video') return null;
+  return (items.find((candidate) => isLinkedCompanion(anchor, candidate, 'audio')) as AudioItem | undefined) ?? null;
+}
+
+export function getLinkedVideoCompanion(items: TimelineItem[], anchor: TimelineItem): VideoItem | null {
+  if (anchor.type !== 'audio') return null;
+  return (items.find((candidate) => isLinkedCompanion(anchor, candidate, 'video')) as VideoItem | undefined) ?? null;
+}
+
+export function hasLinkedAudioCompanion(items: TimelineItem[], anchor: TimelineItem): boolean {
+  return getLinkedAudioCompanion(items, anchor) !== null;
+}
+
+export function hasLinkedVideoCompanion(items: TimelineItem[], anchor: TimelineItem): boolean {
+  return getLinkedVideoCompanion(items, anchor) !== null;
+}
+
+export function getLinkedVideoIdsWithAudio(items: TimelineItem[]): Set<string> {
+  const linkedVideoIds = new Set<string>();
+
+  for (const item of items) {
+    if (item.type === 'video' && hasLinkedAudioCompanion(items, item)) {
+      linkedVideoIds.add(item.id);
+    }
+  }
+
+  return linkedVideoIds;
+}

@@ -235,6 +235,10 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
         durationInFrames={item.durationInFrames}
         audioFadeIn={item.audioFadeIn}
         audioFadeOut={item.audioFadeOut}
+        audioFadeInCurve={item.audioFadeInCurve}
+        audioFadeOutCurve={item.audioFadeOutCurve}
+        audioFadeInCurveX={item.audioFadeInCurveX}
+        audioFadeOutCurveX={item.audioFadeOutCurveX}
       />
     );
   }

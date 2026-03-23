@@ -109,6 +109,7 @@ export interface TimelineActions {
   removeKeyframesForProperty: (itemId: string, property: AnimatableProperty) => void;
   getKeyframesForItem: (itemId: string) => ItemKeyframes | undefined;
   hasKeyframesAtFrame: (itemId: string, property: AnimatableProperty, frame: number) => boolean;
+  repairLegacyAvTracks: () => Promise<boolean>;
   saveTimeline: (projectId: string) => Promise<void>;
   loadTimeline: (projectId: string) => Promise<void>;
   clearTimeline: () => void;

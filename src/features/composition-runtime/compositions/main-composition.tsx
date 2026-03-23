@@ -24,7 +24,6 @@ import {
   resolveCompositionRenderPlan,
   type AudioTrackItem,
   type ShapeMaskWithTrackOrder,
-  type VideoTrackItem,
 } from '../utils/scene-assembly';
 import { resolveActiveShapeMasksAtFrame } from '../utils/frame-scene';
 import { KeyframesContext } from '../contexts/keyframes-context-core';
@@ -34,8 +33,7 @@ import {
   materializeMaskInfos,
   reuseStableMaskInfos,
 } from '../utils/mask-info';
-
-type EnrichedVideoItem = VideoTrackItem;
+import { hasLinkedAudioCompanion } from '@/shared/utils/linked-media';
 
 const TRANSITION_AUDIO_PREMOUNT_SECONDS = 0.5;
 const STANDALONE_AUDIO_PREMOUNT_SECONDS = 2;
@@ -157,7 +155,10 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
 
   // Video audio is rendered in a dedicated audio layer to decouple audio
   // from transition visual overlays and pooled video element state.
-  const videoAudioItems: EnrichedVideoItem[] = renderPlan.videoItems;
+  const videoAudioItems = useMemo(
+    () => renderPlan.videoItems.filter((item) => !hasLinkedAudioCompanion(audioItems, item)),
+    [audioItems, renderPlan.videoItems]
+  );
 
   // Build explicit audio playback segments for transition overlaps:
   // - One continuous segment per clip (decoupled from visual transitions)
@@ -288,6 +289,10 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
                     durationInFrames={segment.durationInFrames}
                     audioFadeIn={segment.audioFadeIn}
                     audioFadeOut={segment.audioFadeOut}
+                    audioFadeInCurve={segment.audioFadeInCurve}
+                    audioFadeOutCurve={segment.audioFadeOutCurve}
+                    audioFadeInCurveX={segment.audioFadeInCurveX}
+                    audioFadeOutCurveX={segment.audioFadeOutCurveX}
                     crossfadeFadeIn={segment.crossfadeFadeIn}
                     crossfadeFadeOut={segment.crossfadeFadeOut}
                   />
@@ -303,6 +308,10 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
                     durationInFrames={segment.durationInFrames}
                     audioFadeIn={segment.audioFadeIn}
                     audioFadeOut={segment.audioFadeOut}
+                    audioFadeInCurve={segment.audioFadeInCurve}
+                    audioFadeOutCurve={segment.audioFadeOutCurve}
+                    audioFadeInCurveX={segment.audioFadeInCurveX}
+                    audioFadeOutCurveX={segment.audioFadeOutCurveX}
                     crossfadeFadeIn={segment.crossfadeFadeIn}
                     crossfadeFadeOut={segment.crossfadeFadeOut}
                   />
@@ -335,6 +344,10 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
                     durationInFrames={segment.durationInFrames}
                     audioFadeIn={segment.audioFadeIn}
                     audioFadeOut={segment.audioFadeOut}
+                    audioFadeInCurve={segment.audioFadeInCurve}
+                    audioFadeOutCurve={segment.audioFadeOutCurve}
+                    audioFadeInCurveX={segment.audioFadeInCurveX}
+                    audioFadeOutCurveX={segment.audioFadeOutCurveX}
                   />
                 ) : (
                   <PitchCorrectedAudio
@@ -348,6 +361,10 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
                     durationInFrames={segment.durationInFrames}
                     audioFadeIn={segment.audioFadeIn}
                     audioFadeOut={segment.audioFadeOut}
+                    audioFadeInCurve={segment.audioFadeInCurve}
+                    audioFadeOutCurve={segment.audioFadeOutCurve}
+                    audioFadeInCurveX={segment.audioFadeInCurveX}
+                    audioFadeOutCurveX={segment.audioFadeOutCurveX}
                   />
                 )}
               </Sequence>

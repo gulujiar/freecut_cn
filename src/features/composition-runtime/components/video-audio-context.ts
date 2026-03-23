@@ -7,6 +7,7 @@ import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
 import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/composition-runtime/deps/keyframes';
 import type { VideoItem } from '@/types/timeline';
+import { evaluateAudioFadeInCurve, evaluateAudioFadeOutCurve } from '@/shared/utils/audio-fade-curve';
 
 // Track video elements that have been connected to Web Audio API
 // A video element can only be connected to ONE MediaElementSourceNode ever
@@ -147,6 +148,10 @@ export function useVideoAudioVolume(
   // Use preview values if available, otherwise use item's stored values
   const audioFadeIn = preview?.audioFadeIn ?? item.audioFadeIn ?? 0;
   const audioFadeOut = preview?.audioFadeOut ?? item.audioFadeOut ?? 0;
+  const audioFadeInCurve = preview?.audioFadeInCurve ?? item.audioFadeInCurve ?? 0;
+  const audioFadeOutCurve = preview?.audioFadeOutCurve ?? item.audioFadeOutCurve ?? 0;
+  const audioFadeInCurveX = preview?.audioFadeInCurveX ?? item.audioFadeInCurveX ?? 0.52;
+  const audioFadeOutCurveX = preview?.audioFadeOutCurveX ?? item.audioFadeOutCurveX ?? 0.52;
 
   if (muted) return 0;
 
@@ -181,19 +186,9 @@ export function useVideoAudioVolume(
         );
       }
     } else if (hasFadeIn) {
-      fadeMultiplier = interpolate(
-        frame,
-        [0, fadeInFrames],
-        [0, 1],
-        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-      );
+      fadeMultiplier = evaluateAudioFadeInCurve(frame / fadeInFrames, audioFadeInCurve, audioFadeInCurveX);
     } else {
-      fadeMultiplier = interpolate(
-        frame,
-        [fadeOutStart, item.durationInFrames],
-        [1, 0],
-        { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
-      );
+      fadeMultiplier = evaluateAudioFadeOutCurve((frame - fadeOutStart) / fadeOutFrames, audioFadeOutCurve, audioFadeOutCurveX);
     }
   }
 

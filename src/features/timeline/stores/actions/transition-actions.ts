@@ -14,11 +14,130 @@ import type {
   SlideDirection,
   FlipDirection,
 } from '@/types/transition';
+import type { AudioItem, TimelineItem, VideoItem } from '@/types/timeline';
 import { useItemsStore } from '../items-store';
 import { useTransitionsStore } from '../transitions-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
 import { canAddTransition } from '../../utils/transition-utils';
 import { execute, logger, applyTransitionRepairs } from './shared';
+import { getLinkedAudioCompanion } from '@/shared/utils/linked-media';
+
+const AUDIO_FADE_EPSILON = 0.0001;
+
+interface LinkedAudioTransitionPair {
+  leftAudio: AudioItem;
+  rightAudio: AudioItem;
+}
+
+function isSynchronizedLinkedAudio(videoClip: VideoItem, audioClip: AudioItem): boolean {
+  return audioClip.from === videoClip.from
+    && audioClip.durationInFrames === videoClip.durationInFrames;
+}
+
+function getManagedLinkedAudioTransitionPair(
+  items: TimelineItem[],
+  leftClip: TimelineItem,
+  rightClip: TimelineItem,
+): LinkedAudioTransitionPair | null {
+  if (leftClip.type !== 'video' || rightClip.type !== 'video') {
+    return null;
+  }
+
+  const leftAudio = getLinkedAudioCompanion(items, leftClip);
+  const rightAudio = getLinkedAudioCompanion(items, rightClip);
+  if (!leftAudio || !rightAudio) {
+    return null;
+  }
+
+  if (leftAudio.trackId !== rightAudio.trackId) {
+    return null;
+  }
+
+  if (!isSynchronizedLinkedAudio(leftClip, leftAudio) || !isSynchronizedLinkedAudio(rightClip, rightAudio)) {
+    return null;
+  }
+
+  return { leftAudio, rightAudio };
+}
+
+function shouldUpdateManagedAudioFade(currentFadeSeconds: number | undefined, expectedFadeSeconds: number): boolean {
+  if (currentFadeSeconds === undefined) return true;
+  return Math.abs(currentFadeSeconds - expectedFadeSeconds) <= AUDIO_FADE_EPSILON;
+}
+
+function syncLinkedAudioTransitionAddition(
+  pair: LinkedAudioTransitionPair,
+  durationInFrames: number,
+  fps: number,
+): void {
+  const fadeSeconds = durationInFrames / fps;
+  const originalRightAudioFrom = pair.rightAudio.from;
+
+  useItemsStore.getState()._updateItem(pair.leftAudio.id, {
+    audioFadeOut: fadeSeconds,
+  });
+  useItemsStore.getState()._updateItem(pair.rightAudio.id, {
+    from: pair.rightAudio.from - durationInFrames,
+    audioFadeIn: fadeSeconds,
+  });
+  rippleItemsAfter(pair.rightAudio.id, originalRightAudioFrom, pair.rightAudio.trackId, -durationInFrames);
+}
+
+function syncLinkedAudioTransitionDurationChange(params: {
+  pair: LinkedAudioTransitionPair;
+  oldDurationInFrames: number;
+  newDurationInFrames: number;
+  fps: number;
+}): void {
+  const { pair, oldDurationInFrames, newDurationInFrames, fps } = params;
+  const delta = newDurationInFrames - oldDurationInFrames;
+  const oldFadeSeconds = oldDurationInFrames / fps;
+  const newFadeSeconds = newDurationInFrames / fps;
+  const originalRightAudioFrom = pair.rightAudio.from;
+
+  const leftAudioUpdates: Partial<AudioItem> = {};
+  if (shouldUpdateManagedAudioFade(pair.leftAudio.audioFadeOut, oldFadeSeconds)) {
+    leftAudioUpdates.audioFadeOut = newFadeSeconds;
+  }
+  if (Object.keys(leftAudioUpdates).length > 0) {
+    useItemsStore.getState()._updateItem(pair.leftAudio.id, leftAudioUpdates);
+  }
+
+  const rightAudioUpdates: Partial<AudioItem> = {
+    from: pair.rightAudio.from - delta,
+  };
+  if (shouldUpdateManagedAudioFade(pair.rightAudio.audioFadeIn, oldFadeSeconds)) {
+    rightAudioUpdates.audioFadeIn = newFadeSeconds;
+  }
+  useItemsStore.getState()._updateItem(pair.rightAudio.id, rightAudioUpdates);
+  rippleItemsAfter(pair.rightAudio.id, originalRightAudioFrom, pair.rightAudio.trackId, -delta);
+}
+
+function syncLinkedAudioTransitionRemoval(
+  pair: LinkedAudioTransitionPair,
+  durationInFrames: number,
+  fps: number,
+): void {
+  const fadeSeconds = durationInFrames / fps;
+  const originalRightAudioFrom = pair.rightAudio.from;
+
+  const leftAudioUpdates: Partial<AudioItem> = {};
+  if (shouldUpdateManagedAudioFade(pair.leftAudio.audioFadeOut, fadeSeconds)) {
+    leftAudioUpdates.audioFadeOut = 0;
+  }
+  if (Object.keys(leftAudioUpdates).length > 0) {
+    useItemsStore.getState()._updateItem(pair.leftAudio.id, leftAudioUpdates);
+  }
+
+  const rightAudioUpdates: Partial<AudioItem> = {
+    from: pair.rightAudio.from + durationInFrames,
+  };
+  if (shouldUpdateManagedAudioFade(pair.rightAudio.audioFadeIn, fadeSeconds)) {
+    rightAudioUpdates.audioFadeIn = 0;
+  }
+  useItemsStore.getState()._updateItem(pair.rightAudio.id, rightAudioUpdates);
+  rippleItemsAfter(pair.rightAudio.id, originalRightAudioFrom, pair.rightAudio.trackId, durationInFrames);
+}
 
 /**
  * Ripple items after the given clip on the same track by a delta amount.
@@ -92,6 +211,7 @@ export function addTransition(
 
     // FCP-style overlap: slide right clip left by transition duration
     const originalRightFrom = rightClip.from;
+    const linkedAudioPair = getManagedLinkedAudioTransitionPair(items, leftClip, rightClip);
 
     // Update right clip: slide left (sourceStart stays unchanged — the first D
     // source frames become the transition-in region)
@@ -101,6 +221,10 @@ export function addTransition(
 
     // Ripple all items after right clip on the same track left by duration
     rippleItemsAfter(rightClipId, originalRightFrom, rightClip.trackId, -duration);
+
+    if (linkedAudioPair) {
+      syncLinkedAudioTransitionAddition(linkedAudioPair, duration, fps);
+    }
 
     // Create transition record
     useTransitionsStore.getState()._addTransition(
@@ -129,12 +253,15 @@ export function updateTransition(
     const transitions = useTransitionsStore.getState().transitions;
     const transition = transitions.find((t) => t.id === id);
     if (!transition) return;
+    const items = useItemsStore.getState().items;
+    const leftClip = items.find((i) => i.id === transition.leftClipId);
+    const rightClip = items.find((i) => i.id === transition.rightClipId);
+    const linkedAudioPair = leftClip && rightClip
+      ? getManagedLinkedAudioTransitionPair(items, leftClip, rightClip)
+      : null;
 
     // If duration is changing, adjust clip overlap
     if (updates.durationInFrames !== undefined && updates.durationInFrames !== transition.durationInFrames) {
-      const items = useItemsStore.getState().items;
-      const rightClip = items.find((i) => i.id === transition.rightClipId);
-
       if (rightClip) {
         const oldDuration = transition.durationInFrames;
         const newDuration = updates.durationInFrames;
@@ -162,6 +289,15 @@ export function updateTransition(
 
         // Ripple subsequent items
         rippleItemsAfter(transition.rightClipId, originalRightFrom, rightClip.trackId, -delta);
+
+        if (linkedAudioPair) {
+          syncLinkedAudioTransitionDurationChange({
+            pair: linkedAudioPair,
+            oldDurationInFrames: oldDuration,
+            newDurationInFrames: newDuration,
+            fps: useTimelineSettingsStore.getState().fps,
+          });
+        }
       }
     }
 
@@ -206,7 +342,11 @@ export function removeTransition(id: string): void {
 
     if (transition) {
       const items = useItemsStore.getState().items;
+      const leftClip = items.find((i) => i.id === transition.leftClipId);
       const rightClip = items.find((i) => i.id === transition.rightClipId);
+      const linkedAudioPair = leftClip && rightClip
+        ? getManagedLinkedAudioTransitionPair(items, leftClip, rightClip)
+        : null;
 
       if (rightClip) {
         const duration = transition.durationInFrames;
@@ -219,6 +359,14 @@ export function removeTransition(id: string): void {
 
         // Ripple subsequent items back right
         rippleItemsAfter(transition.rightClipId, originalRightFrom, rightClip.trackId, duration);
+
+        if (linkedAudioPair) {
+          syncLinkedAudioTransitionRemoval(
+            linkedAudioPair,
+            duration,
+            useTimelineSettingsStore.getState().fps,
+          );
+        }
       }
     }
 

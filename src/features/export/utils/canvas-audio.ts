@@ -22,6 +22,8 @@ import {
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { getMediaAudioCodecById, resolveMediaUrl } from '@/features/export/deps/media-library';
 import { ensureAc3DecoderRegistered, isAc3AudioCodec } from '@/shared/media/ac3-decoder';
+import { getLinkedVideoIdsWithAudio } from '@/shared/utils/linked-media';
+import { evaluateAudioFadeInCurve, evaluateAudioFadeOutCurve } from '@/shared/utils/audio-fade-curve';
 
 const log = createLogger('CanvasAudio');
 
@@ -57,6 +59,10 @@ interface AudioSegment {
   volume: number;            // -60 to +12 dB
   fadeInFrames: number;
   fadeOutFrames: number;
+  fadeInCurve: number;
+  fadeOutCurve: number;
+  fadeInCurveX: number;
+  fadeOutCurveX: number;
   useEqualPowerFades: boolean;
   speed: number;             // Playback rate
   muted: boolean;
@@ -93,12 +99,13 @@ interface AudioProcessingConfig {
  * @param composition - The composition with tracks
  * @returns Array of audio segments to process
  */
-function extractAudioSegments(composition: CompositionInputProps, fps: number): AudioSegment[] {
+export function extractAudioSegments(composition: CompositionInputProps, fps: number): AudioSegment[] {
   const { tracks = [], transitions = [] } = composition;
   const segments: AudioSegment[] = [];
   const audioOnlySegments: AudioSegment[] = [];
   const videoById = new Map<string, { item: VideoItem; trackId: string; muted: boolean; trackVolume: number }>();
   const extensionByClipId = new Map<string, { before: number; after: number; overlapFadeOut: number; overlapFadeIn: number }>();
+  const linkedRootVideoIds = getLinkedVideoIdsWithAudio(tracks.flatMap((track) => track.items));
 
   const ensureExtension = (clipId: string): { before: number; after: number; overlapFadeOut: number; overlapFadeIn: number } => {
     const existing = extensionByClipId.get(clipId);
@@ -157,6 +164,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
     for (const item of track.items) {
       if (item.type === 'video') {
         const videoItem = item as VideoItem;
+        if (linkedRootVideoIds.has(videoItem.id)) continue;
         if (!videoItem.src) continue;
         videoById.set(item.id, {
           item: videoItem,
@@ -183,6 +191,10 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
           volume: (item.volume ?? 0) + (track.volume ?? 0), // dB
           fadeInFrames: (item.audioFadeIn ?? 0) * fps,
           fadeOutFrames: (item.audioFadeOut ?? 0) * fps,
+          fadeInCurve: item.audioFadeInCurve ?? 0,
+          fadeOutCurve: item.audioFadeOutCurve ?? 0,
+          fadeInCurveX: item.audioFadeInCurveX ?? 0.52,
+          fadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
           useEqualPowerFades: false,
           speed: audioItem.speed ?? 1, // Playback speed from BaseTimelineItem
           muted: track.muted ?? false,
@@ -323,6 +335,10 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
       volume: (videoItem.volume ?? 0) + entry.trackVolume,
       fadeInFrames: fadeIn,
       fadeOutFrames: fadeOut,
+      fadeInCurve: videoItem.audioFadeInCurve ?? 0,
+      fadeOutCurve: videoItem.audioFadeOutCurve ?? 0,
+      fadeInCurveX: videoItem.audioFadeInCurveX ?? 0.52,
+      fadeOutCurveX: videoItem.audioFadeOutCurveX ?? 0.52,
       useEqualPowerFades: before > 0 || after > 0 || hasOverlapFade,
       speed,
       muted: entry.muted,
@@ -368,6 +384,10 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
     volume: segment.volume,
     fadeInFrames: segment.fadeInFrames,
     fadeOutFrames: segment.fadeOutFrames,
+    fadeInCurve: segment.fadeInCurve,
+    fadeOutCurve: segment.fadeOutCurve,
+    fadeInCurveX: segment.fadeInCurveX,
+    fadeOutCurveX: segment.fadeOutCurveX,
     useEqualPowerFades: segment.useEqualPowerFades,
     speed: segment.speed,
     muted: segment.muted,
@@ -387,6 +407,8 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
       const mergedEnd = segment.startFrame + segment.durationFrames;
       active.durationFrames = mergedEnd - active.startFrame;
       active.fadeOutFrames = segment.fadeOutFrames;
+      active.fadeOutCurve = segment.fadeOutCurve;
+      active.fadeOutCurveX = segment.fadeOutCurveX;
       active.useEqualPowerFades = segment.useEqualPowerFades;
       active.clip = segment.clip;
       active.afterFrames = segment.afterFrames;
@@ -413,6 +435,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
       const compItem = item as CompositionItem;
       const subComp = useCompositionsStore.getState().getComposition(compItem.compositionId);
       if (!subComp) continue;
+      const linkedSubCompVideoIds = getLinkedVideoIdsWithAudio(subComp.items);
 
       const compFrom = compItem.from;
       const sourceOffset = compItem.sourceStart ?? compItem.trimStart ?? 0;
@@ -420,6 +443,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
 
       for (const subItem of subComp.items) {
         if (subItem.type !== 'video' && subItem.type !== 'audio') continue;
+        if (subItem.type === 'video' && linkedSubCompVideoIds.has(subItem.id)) continue;
 
         // Check sub-track muted state
         const subTrack = subComp.tracks.find((t) => t.id === subItem.trackId);
@@ -476,6 +500,10 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
           volume: (subItem.volume ?? 0) + (track.volume ?? 0) + (subTrack?.volume ?? 0),
           fadeInFrames: adjustedFadeInFrames,
           fadeOutFrames: adjustedFadeOutFrames,
+          fadeInCurve: subItem.audioFadeInCurve ?? 0,
+          fadeOutCurve: subItem.audioFadeOutCurve ?? 0,
+          fadeInCurveX: subItem.audioFadeInCurveX ?? 0.52,
+          fadeOutCurveX: subItem.audioFadeOutCurveX ?? 0.52,
           useEqualPowerFades: false,
           speed,
           muted: trackMuted || subTrackMuted,
@@ -806,7 +834,11 @@ function applyFades(
   samples: Float32Array,
   fadeInSamples: number,
   fadeOutSamples: number,
-  useEqualPower: boolean = false
+  useEqualPower: boolean = false,
+  fadeInCurve: number = 0,
+  fadeOutCurve: number = 0,
+  fadeInCurveX: number = 0.52,
+  fadeOutCurveX: number = 0.52,
 ): Float32Array {
   const output = new Float32Array(samples.length);
   output.set(samples);
@@ -817,7 +849,7 @@ function applyFades(
       const progress = i / fadeInSamples;
       const gain = useEqualPower
         ? Math.sin(progress * Math.PI / 2)
-        : progress;
+        : evaluateAudioFadeInCurve(progress, fadeInCurve, fadeInCurveX);
       output[i] = output[i]! * gain;
     }
   }
@@ -832,7 +864,7 @@ function applyFades(
       const progress = i / fadeOutSamples;
       const gain = useEqualPower
         ? Math.cos(progress * Math.PI / 2)
-        : 1 - progress;
+        : evaluateAudioFadeOutCurve(progress, fadeOutCurve, fadeOutCurveX);
       output[sampleIndex] = output[sampleIndex]! * gain;
     }
   }
@@ -1216,7 +1248,11 @@ export async function processAudio(
             channelSamples,
             fadeInSamples,
             fadeOutSamples,
-            segment.useEqualPowerFades
+            segment.useEqualPowerFades,
+            segment.fadeInCurve,
+            segment.fadeOutCurve,
+            segment.fadeInCurveX,
+            segment.fadeOutCurveX,
           );
         }
 

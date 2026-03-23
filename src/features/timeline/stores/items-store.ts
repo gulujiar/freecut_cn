@@ -9,6 +9,7 @@ import { getLinkedItems } from '../utils/linked-items';
 import { useCompositionNavigationStore } from './composition-navigation-store';
 import { useTimelineSettingsStore } from './timeline-settings-store';
 import { useTransitionsStore } from './transitions-store';
+import { clampAudioFadeCurve, clampAudioFadeCurveX } from '@/shared/utils/audio-fade-curve';
 
 const log = createLogger('ItemsStore');
 
@@ -43,6 +44,10 @@ function normalizeFrameFields<T extends TimelineItem>(item: T): T {
     sourceEnd: roundOptionalFrame(item.sourceEnd),
     sourceDuration: roundOptionalFrame(item.sourceDuration),
     sourceFps: normalizeOptionalFps(item.sourceFps),
+    audioFadeInCurve: item.audioFadeInCurve === undefined ? undefined : clampAudioFadeCurve(item.audioFadeInCurve),
+    audioFadeOutCurve: item.audioFadeOutCurve === undefined ? undefined : clampAudioFadeCurve(item.audioFadeOutCurve),
+    audioFadeInCurveX: item.audioFadeInCurveX === undefined ? undefined : clampAudioFadeCurveX(item.audioFadeInCurveX),
+    audioFadeOutCurveX: item.audioFadeOutCurveX === undefined ? undefined : clampAudioFadeCurveX(item.audioFadeOutCurveX),
   };
 
   // Legacy split clips can have sourceEnd without sourceStart.
@@ -73,6 +78,19 @@ function normalizeItemUpdates(updates: Partial<TimelineItem>): Partial<TimelineI
   if (normalized.sourceEnd !== undefined &&
       normalized.sourceStart === undefined) {
     normalized.sourceStart = 0;
+  }
+
+   if (normalized.audioFadeInCurve !== undefined) {
+    normalized.audioFadeInCurve = clampAudioFadeCurve(normalized.audioFadeInCurve);
+  }
+  if (normalized.audioFadeOutCurve !== undefined) {
+    normalized.audioFadeOutCurve = clampAudioFadeCurve(normalized.audioFadeOutCurve);
+  }
+  if (normalized.audioFadeInCurveX !== undefined) {
+    normalized.audioFadeInCurveX = clampAudioFadeCurveX(normalized.audioFadeInCurveX);
+  }
+  if (normalized.audioFadeOutCurveX !== undefined) {
+    normalized.audioFadeOutCurveX = clampAudioFadeCurveX(normalized.audioFadeOutCurveX);
   }
 
   return normalized;

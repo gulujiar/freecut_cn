@@ -282,17 +282,17 @@ export const ItemContextMenu = memo(function ItemContextMenu({
         {/* Composition operations */}
         {isCompositionItem && onEnterComposition && (
           <ContextMenuItem onClick={onEnterComposition}>
-            Enter Composition
+            Open Compound Clip
           </ContextMenuItem>
         )}
         {isCompositionItem && onDissolveComposition && (
           <ContextMenuItem onClick={onDissolveComposition}>
-            Dissolve Pre-Comp
+            Dissolve Compound Clip
           </ContextMenuItem>
         )}
         {canCreatePreComp && onCreatePreComp && (
           <ContextMenuItem onClick={onCreatePreComp}>
-            Create Pre-Composition
+            Create Compound Clip
           </ContextMenuItem>
         )}
         {((isCompositionItem && (onEnterComposition || onDissolveComposition)) || (canCreatePreComp && onCreatePreComp)) && (

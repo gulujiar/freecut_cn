@@ -46,9 +46,12 @@ import {
   convertTimelineToComposition,
 } from '@/features/timeline/deps/export-contract';
 import { resolveMediaUrls } from '@/features/timeline/deps/media-library-resolver';
+import { mediaLibraryService } from '@/features/timeline/deps/media-library-service';
 import { validateMediaReferences } from '@/features/timeline/utils/media-validation';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/domain/projects/migrations';
+import { repairLegacyAvTrackLayout } from '@/features/timeline/utils/legacy-av-track-repair';
+import type { Project } from '@/types/project';
 
 
 /**
@@ -82,6 +85,103 @@ async function scaleCanvasToBlob(
   outCtx.imageSmoothingQuality = 'high';
   outCtx.drawImage(current, 0, 0, targetW, targetH);
   return out.convertToBlob({ type: 'image/jpeg', quality });
+}
+
+function collectVideoMediaIds(project: Project): string[] {
+  const mediaIds = new Set<string>();
+  const timeline = project.timeline;
+  if (!timeline) return [];
+
+  for (const item of timeline.items ?? []) {
+    if (item.type === 'video' && item.mediaId) {
+      mediaIds.add(item.mediaId);
+    }
+  }
+
+  for (const composition of timeline.compositions ?? []) {
+    for (const item of composition.items ?? []) {
+      if (item.type === 'video' && item.mediaId) {
+        mediaIds.add(item.mediaId);
+      }
+    }
+  }
+
+  return [...mediaIds];
+}
+
+async function buildVideoHasAudioMap(mediaIds: string[]): Promise<Record<string, boolean | undefined>> {
+  const mediaById = useMediaLibraryStore.getState().mediaById;
+  const entries = await Promise.all(mediaIds.map(async (mediaId) => {
+    const cachedMedia = mediaById[mediaId];
+    if (cachedMedia) {
+      return [mediaId, !!cachedMedia.audioCodec] as const;
+    }
+
+    const media = await mediaLibraryService.getMedia(mediaId);
+    return [mediaId, !!media?.audioCodec] as const;
+  }));
+
+  return Object.fromEntries(entries);
+}
+
+async function repairLegacyProjectAvLayouts(project: Project): Promise<{ project: Project; repaired: boolean }> {
+  if (!project.timeline) {
+    return { project, repaired: false };
+  }
+
+  const videoMediaIds = collectVideoMediaIds(project);
+  if (videoMediaIds.length === 0) {
+    return { project, repaired: false };
+  }
+
+  const videoHasAudioByMediaId = await buildVideoHasAudioMap(videoMediaIds);
+  const rootRepair = repairLegacyAvTrackLayout({
+    tracks: (project.timeline.tracks ?? []) as TimelineTrack[],
+    items: (project.timeline.items ?? []) as TimelineItem[],
+    keyframes: (project.timeline.keyframes ?? []) as ItemKeyframes[],
+    fps: project.metadata.fps,
+    videoHasAudioByMediaId,
+  });
+  const repairedCompositions = (project.timeline.compositions ?? []).map((composition) => {
+    const repair = repairLegacyAvTrackLayout({
+      tracks: composition.tracks as TimelineTrack[],
+      items: composition.items as TimelineItem[],
+      keyframes: (composition.keyframes ?? []) as ItemKeyframes[],
+      fps: composition.fps,
+      videoHasAudioByMediaId,
+    });
+
+    return {
+      repair,
+      composition: repair.changed
+        ? {
+          ...composition,
+          tracks: repair.tracks as typeof composition.tracks,
+          items: repair.items as typeof composition.items,
+          keyframes: repair.keyframes as typeof composition.keyframes,
+        }
+        : composition,
+    };
+  });
+
+  const repaired = rootRepair.changed || repairedCompositions.some((entry) => entry.repair.changed);
+  if (!repaired) {
+    return { project, repaired: false };
+  }
+
+  return {
+    repaired: true,
+    project: {
+      ...project,
+      timeline: {
+        ...project.timeline,
+        tracks: rootRepair.tracks as typeof project.timeline.tracks,
+        items: rootRepair.items as typeof project.timeline.items,
+        keyframes: rootRepair.keyframes as typeof project.timeline.keyframes,
+        compositions: repairedCompositions.map((entry) => entry.composition),
+      },
+    },
+  };
 }
 
 /**
@@ -314,15 +414,18 @@ async function loadTimeline(projectId: string): Promise<void> {
 
     // Run migrations and normalization
     const migrationResult = migrateProject(rawProject);
-    const project = migrationResult.project;
+    const repairedLegacyLayouts = await repairLegacyProjectAvLayouts(migrationResult.project);
+    const project = repairedLegacyLayouts.project;
 
     // Log migration activity
-    if (migrationResult.migrated) {
+    if (migrationResult.migrated || repairedLegacyLayouts.repaired) {
       if (migrationResult.appliedMigrations.length > 0) {
         logger.info(
           `Migrated project from v${migrationResult.fromVersion} to v${migrationResult.toVersion}`,
           { migrations: migrationResult.appliedMigrations }
         );
+      } else if (repairedLegacyLayouts.repaired) {
+        logger.info('Repaired legacy A/V track layout for project', { projectId });
       } else {
         logger.debug('Project normalized with current defaults');
       }
@@ -576,6 +679,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       removeKeyframesForProperty: timelineActions.removeKeyframesForProperty,
       getKeyframesForItem: timelineActions.getKeyframesForItem,
       hasKeyframesAtFrame: timelineActions.hasKeyframesAtFrame,
+      repairLegacyAvTracks: timelineActions.repairLegacyAvTracks,
       clearTimeline: timelineActions.clearTimeline,
       markDirty: timelineActions.markDirty,
       markClean: timelineActions.markClean,

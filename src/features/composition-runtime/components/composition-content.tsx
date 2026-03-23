@@ -25,6 +25,7 @@ import {
 import {
   resolveTrackRenderState,
 } from '../utils/scene-assembly';
+import { getLinkedVideoIdsWithAudio } from '@/shared/utils/linked-media';
 
 interface CompositionContentProps {
   item: CompositionItemType;
@@ -169,6 +170,10 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     [subComp]
   );
   const sortedTracks = trackRenderState?.visibleTracksByOrderDesc ?? [];
+  const linkedVideoIdsWithOwnedAudio = useMemo(
+    () => getLinkedVideoIdsWithAudio(resolvedItems),
+    [resolvedItems]
+  );
   const previousMaskInfosRef = React.useRef<MaskInfo[]>(EMPTY_MASK_INFOS);
 
   // Resolve active sub-comp masks for the current local frame.
@@ -267,7 +272,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
                   >
                     <Item
                       item={subItem}
-                      muted={parentMuted || track.muted}
+                      muted={parentMuted || track.muted || linkedVideoIdsWithOwnedAudio.has(subItem.id)}
                       masks={getMasksForTrackOrder(activeMaskInfos, trackOrder)}
                       renderDepth={renderDepth}
                     />
