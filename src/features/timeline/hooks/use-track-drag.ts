@@ -3,6 +3,11 @@ import type { TimelineTrack } from '@/types/timeline';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { DRAG_THRESHOLD_PIXELS } from '../constants';
+import {
+  buildTrackContentCreateTrackMovePlan,
+  buildTrackContentMoveUpdates,
+  resolveTrackContentDragPlan,
+} from '../utils/track-content-drag';
 
 // Shared ref for drag offset (avoids re-renders from store updates)
 export const trackDragOffsetRef = { current: 0 };
@@ -17,6 +22,8 @@ interface DragState {
   trackId: string; // Anchor track
   startMouseY: number;
   currentMouseY: number;
+  kind: 'video' | 'audio';
+  sectionTrackIds: string[];
   draggedTracks: Array<{
     id: string;
   }>;
@@ -30,9 +37,9 @@ interface UseTrackDragReturn {
 }
 
 /**
- * Track drag-and-drop hook for vertical reordering
+ * Track drag-and-drop hook for moving track contents within fixed lanes
  *
- * Follows the same pattern as use-timeline-drag but for vertical track reordering.
+ * Keeps V/A lane indexes fixed and remaps clip contents inside the dragged section.
  * Supports multi-track selection and drag.
  *
  * @param track - The track to make draggable
@@ -45,7 +52,9 @@ export function useTrackDrag(track: TimelineTrack): UseTrackDragReturn {
 
   // Get store state with granular selectors
   const tracks = useTimelineStore((s) => s.tracks);
-  const setTracks = useTimelineStore((s) => s.setTracks);
+  const items = useTimelineStore((s) => s.items);
+  const moveItems = useTimelineStore((s) => s.moveItems);
+  const moveItemsWithTrackChanges = useTimelineStore((s) => s.moveItemsWithTrackChanges);
 
   // Selection store
   const selectedTrackIds = useSelectionStore((s) => s.selectedTrackIds);
@@ -54,15 +63,39 @@ export function useTrackDrag(track: TimelineTrack): UseTrackDragReturn {
 
   // Create stable refs to avoid stale closures
   const tracksRef = useRef(tracks);
+  const itemsRef = useRef(items);
   const selectedTrackIdsRef = useRef(selectedTrackIds);
-  const setTracksRef = useRef(setTracks);
+  const moveItemsRef = useRef(moveItems);
+  const moveItemsWithTrackChangesRef = useRef(moveItemsWithTrackChanges);
 
   // Update refs when dependencies change
   useEffect(() => {
     tracksRef.current = tracks;
+    itemsRef.current = items;
     selectedTrackIdsRef.current = selectedTrackIds;
-    setTracksRef.current = setTracks;
-  }, [tracks, selectedTrackIds, setTracks]);
+    moveItemsRef.current = moveItems;
+    moveItemsWithTrackChangesRef.current = moveItemsWithTrackChanges;
+  }, [items, moveItems, moveItemsWithTrackChanges, tracks, selectedTrackIds]);
+
+  const getCreateNewZoneAtMouseY = useCallback((mouseY: number): 'video' | 'audio' | null => {
+    const videoZone = document.querySelector<HTMLElement>('[data-track-header-new-zone="video"]');
+    if (videoZone) {
+      const rect = videoZone.getBoundingClientRect();
+      if (mouseY >= rect.top && mouseY <= rect.bottom) {
+        return 'video';
+      }
+    }
+
+    const audioZone = document.querySelector<HTMLElement>('[data-track-header-new-zone="audio"]');
+    if (audioZone) {
+      const rect = audioZone.getBoundingClientRect();
+      if (mouseY >= rect.top && mouseY <= rect.bottom) {
+        return 'audio';
+      }
+    }
+
+    return null;
+  }, []);
 
   /**
    * Handle mouse down - start dragging
@@ -96,9 +129,18 @@ export function useTrackDrag(track: TimelineTrack): UseTrackDragReturn {
       // Determine which tracks to drag
       const tracksToDrag = isInSelection ? [...currentSelectedIds] : [track.id];
       const allTracks = tracksRef.current;
+      const dragPlan = resolveTrackContentDragPlan({
+        tracks: allTracks,
+        anchorTrackId: track.id,
+        selectedTrackIds: tracksToDrag,
+      });
+
+      if (!dragPlan) {
+        return;
+      }
 
       // Store initial state for all dragged tracks
-      const draggedTracks = tracksToDrag
+      const draggedTracks = dragPlan.draggedTrackIds
         .map((id) => {
           const trackIndex = allTracks.findIndex((t) => t.id === id);
           if (trackIndex === -1) return null;
@@ -111,6 +153,8 @@ export function useTrackDrag(track: TimelineTrack): UseTrackDragReturn {
         trackId: track.id,
         startMouseY: e.clientY,
         currentMouseY: e.clientY,
+        kind: dragPlan.kind,
+        sectionTrackIds: dragPlan.sectionTrackIds,
         draggedTracks,
       };
 
@@ -185,9 +229,24 @@ export function useTrackDrag(track: TimelineTrack): UseTrackDragReturn {
       trackDragOffsetRef.current = deltaY;
 
       const allTracks = tracksRef.current;
-      const visibleTracks = allTracks;
+      const sectionTrackIds = dragStateRef.current.sectionTrackIds;
+      const visibleTracks = sectionTrackIds
+        .map((trackId) => allTracks.find((track) => track.id === trackId))
+        .filter((track): track is TimelineTrack => track !== undefined);
+      const createNewZone = getCreateNewZoneAtMouseY(e.clientY);
 
       if (visibleTracks.length > 0 && dragStateRef.current) {
+        const sectionStartIndex = allTracks.findIndex((track) => track.id === visibleTracks[0]?.id);
+        if (sectionStartIndex !== -1 && createNewZone === dragStateRef.current.kind) {
+          const absoluteDropIndex = createNewZone === 'video'
+            ? sectionStartIndex
+            : sectionStartIndex + visibleTracks.length;
+          setDropIndex(absoluteDropIndex);
+          trackDropIndexRef.current = absoluteDropIndex;
+          dragStateRef.current.currentMouseY = e.clientY;
+          return;
+        }
+
         // Calculate cumulative heights for each visible track boundary
         const cumulativeHeights: number[] = [0];
         for (let i = 0; i < visibleTracks.length; i++) {
@@ -224,8 +283,13 @@ export function useTrackDrag(track: TimelineTrack): UseTrackDragReturn {
               }
             }
 
-            setDropIndex(closestIndex);
-            trackDropIndexRef.current = closestIndex;
+            const sectionStartIndex = allTracks.findIndex((track) => track.id === visibleTracks[0]?.id);
+            const absoluteDropIndex = sectionStartIndex === -1
+              ? -1
+              : sectionStartIndex + closestIndex;
+
+            setDropIndex(absoluteDropIndex);
+            trackDropIndexRef.current = absoluteDropIndex;
           }
         }
       }
@@ -244,9 +308,11 @@ export function useTrackDrag(track: TimelineTrack): UseTrackDragReturn {
       if (!dragStateRef.current || !isDragging) return;
 
       const dragState = dragStateRef.current;
-      const deltaY = dragState.currentMouseY - dragState.startMouseY;
       const allTracks = tracksRef.current;
-      const visibleTracks = allTracks;
+      const visibleTracks = dragState.sectionTrackIds
+        .map((trackId) => allTracks.find((track) => track.id === trackId))
+        .filter((track): track is TimelineTrack => track !== undefined);
+      const createNewZone = getCreateNewZoneAtMouseY(dragState.currentMouseY);
 
       // Guard against empty tracks array
       if (allTracks.length === 0 || visibleTracks.length === 0) {
@@ -255,7 +321,7 @@ export function useTrackDrag(track: TimelineTrack): UseTrackDragReturn {
       }
 
       const draggedIds = dragState.draggedTracks.map((t) => t.id);
-      const draggedIdsSet = new Set(draggedIds);
+      const deltaY = dragState.currentMouseY - dragState.startMouseY;
       // Calculate cumulative heights for visible tracks
       const cumulativeHeights: number[] = [0];
       for (let i = 0; i < visibleTracks.length; i++) {
@@ -295,41 +361,28 @@ export function useTrackDrag(track: TimelineTrack): UseTrackDragReturn {
         newVisibleIndex = closestIndex;
       }
 
-      let fullInsertBeforeId: string | undefined;
-      if (newVisibleIndex < visibleTracks.length) {
-        fullInsertBeforeId = visibleTracks[newVisibleIndex]?.id;
-      }
+      if (createNewZone === dragState.kind) {
+        const createTrackPlan = buildTrackContentCreateTrackMovePlan({
+          tracks: allTracks,
+          items: itemsRef.current,
+          kind: dragState.kind,
+          draggedTrackIds: draggedIds,
+        });
 
-      let fullIndex: number;
-      if (fullInsertBeforeId) {
-        fullIndex = allTracks.findIndex((t) => t.id === fullInsertBeforeId);
-        if (fullIndex === -1) fullIndex = allTracks.length;
-      } else {
-        fullIndex = allTracks.length;
-      }
-
-      const nonDraggedTracks = allTracks.filter((t) => !draggedIdsSet.has(t.id));
-      const draggedTracksData = draggedIds
-        .map((id) => allTracks.find((t) => t.id === id))
-        .filter((t): t is TimelineTrack => t !== undefined);
-
-      if (draggedTracksData.length > 0) {
-        let insertIndex = fullIndex;
-        for (let i = 0; i < fullIndex && i < allTracks.length; i++) {
-          const currentTrack = allTracks[i];
-          if (currentTrack && draggedIdsSet.has(currentTrack.id)) {
-            insertIndex--;
-          }
+        if (createTrackPlan && createTrackPlan.updates.length > 0) {
+          moveItemsWithTrackChangesRef.current(createTrackPlan.tracks, createTrackPlan.updates);
         }
-        insertIndex = Math.max(0, Math.min(insertIndex, nonDraggedTracks.length));
+      } else {
+        const updates = buildTrackContentMoveUpdates({
+          sectionTrackIds: dragState.sectionTrackIds,
+          draggedTrackIds: draggedIds,
+          items: itemsRef.current,
+          insertIndex: newVisibleIndex,
+        });
 
-        const reorderedTracks = [
-          ...nonDraggedTracks.slice(0, insertIndex),
-          ...draggedTracksData,
-          ...nonDraggedTracks.slice(insertIndex),
-        ];
-
-        setTracksRef.current(reorderedTracks.map((currentTrack, index) => ({ ...currentTrack, order: index })));
+        if (updates.length > 0) {
+          moveItemsRef.current(updates);
+        }
       }
 
       // Suppress the click event that fires after mouseup to retain selection
@@ -351,7 +404,7 @@ export function useTrackDrag(track: TimelineTrack): UseTrackDragReturn {
         window.removeEventListener('keydown', handleKeyDown);
       };
     }
-  }, [isDragging, setDragState]);
+  }, [getCreateNewZoneAtMouseY, isDragging, setDragState]);
 
   return {
     isDragging,

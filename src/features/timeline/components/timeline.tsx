@@ -21,6 +21,7 @@ import { CompositionBreadcrumbs } from './composition-breadcrumbs';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import { trackDropIndexRef, trackDragOffsetRef, trackDragJustDroppedRef } from '../hooks/use-track-drag';
 import { createClassicTrack, getAdjacentTrackOrder, getTrackKind } from '../utils/classic-tracks';
+import { getTrackDropIndicatorTop } from '../utils/track-drop-indicator';
 import { getEmptyTrackIdsForRemoval } from '../utils/track-removal';
 import { createLogger } from '@/shared/logging/logger';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
@@ -167,14 +168,14 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   const bottomSectionSpacerHeight = hasTrackSections
     ? Math.max(0, Math.round((availableSpacerHeight / 2) - clampedSectionDividerOffset))
     : 0;
-  const getTrackStackOffset = useCallback((trackCount: number) => {
-    const baseOffset = visibleTracks.slice(0, trackCount).reduce((sum, track) => sum + track.height, 0);
-    const sectionOffset = hasTrackSections && trackCount > videoTracks.length
-      ? TRACK_SECTION_DIVIDER_HEIGHT
-      : 0;
-
-    return baseOffset + sectionOffset;
-  }, [hasTrackSections, videoTracks.length, visibleTracks]);
+  const getTrackStackOffset = useCallback((trackCount: number) => getTrackDropIndicatorTop({
+    tracks: visibleTracks,
+    dropIndex: trackCount,
+    topSectionSpacerHeight,
+    hasTrackSections,
+    videoTrackCount: videoTracks.length,
+    dividerHeight: TRACK_SECTION_DIVIDER_HEIGHT,
+  }), [hasTrackSections, topSectionSpacerHeight, videoTracks.length, visibleTracks]);
 
   useEffect(() => {
     const element = trackHeadersViewportRef.current;
@@ -588,7 +589,11 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
           <div ref={trackHeadersViewportRef} className="flex-1 overflow-hidden relative">
             <div ref={trackHeadersContainerRef} className="relative">
               {topSectionSpacerHeight > 0 && (
-                <div aria-hidden="true" style={{ height: `${topSectionSpacerHeight}px` }} />
+                <div
+                  aria-hidden="true"
+                  data-track-header-new-zone="video"
+                  style={{ height: `${topSectionSpacerHeight}px` }}
+                />
               )}
 
               {visibleTracks.map((track) => {
@@ -655,7 +660,11 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
               })}
 
               {bottomSectionSpacerHeight > 0 && (
-                <div aria-hidden="true" style={{ height: `${bottomSectionSpacerHeight}px` }} />
+                <div
+                  aria-hidden="true"
+                  data-track-header-new-zone="audio"
+                  style={{ height: `${bottomSectionSpacerHeight}px` }}
+                />
               )}
 
               {/* Drop indicator - shows where tracks will be dropped */}
@@ -663,9 +672,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
                 <div
                   className="absolute left-0 right-0 h-0.5 pointer-events-none z-50 shadow-lg bg-primary"
                   style={{
-                    top: dropIndicatorIndex === 0
-                      ? 0
-                      : getTrackStackOffset(dropIndicatorIndex),
+                    top: getTrackStackOffset(dropIndicatorIndex),
                   }}
                 />
               )}
