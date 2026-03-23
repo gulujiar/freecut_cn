@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useState } from 'react';
 import { cn } from '@/shared/ui/cn';
 import { getAudioFadeHandleLeft } from '../../utils/audio-fade';
 
@@ -11,10 +11,7 @@ interface AudioFadeHandlesProps {
   fadeOutPixels: number;
   isSelected: boolean;
   isEditing: boolean;
-  editingHandle: 'in' | 'out' | null;
   curveEditingHandle: 'in' | 'out' | null;
-  editLabel?: string | null;
-  curveEditLabel?: string | null;
   fadeInLabel?: string;
   fadeOutLabel?: string;
   fadeInCurveDot?: { x: number; yPercent: number } | null;
@@ -34,10 +31,7 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
   fadeOutPixels,
   isSelected,
   isEditing,
-  editingHandle,
   curveEditingHandle,
-  editLabel,
-  curveEditLabel,
   fadeInLabel,
   fadeOutLabel,
   fadeInCurveDot,
@@ -58,21 +52,14 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
     : 'opacity-0 group-hover/timeline-item:opacity-100';
   const fadeInLeft = getAudioFadeHandleLeft({ handle: 'in', clipWidthPixels: clipWidth, fadePixels: fadeInPixels });
   const fadeOutLeft = getAudioFadeHandleLeft({ handle: 'out', clipWidthPixels: clipWidth, fadePixels: fadeOutPixels });
-  const visibleLabelHandle = editingHandle ?? curveEditingHandle ?? hoveredHandle;
+  const visibleLabelHandle = hoveredHandle;
   const activeLeft = visibleLabelHandle === 'in' ? fadeInLeft : fadeOutLeft;
-  const visibleLabel = useMemo(() => {
-    if (editingHandle && editLabel) return editLabel;
-    if (curveEditingHandle && curveEditLabel) return curveEditLabel;
-    if (hoveredHandle === 'in') return fadeInLabel;
-    if (hoveredHandle === 'out') return fadeOutLabel;
-    return null;
-  }, [curveEditLabel, curveEditingHandle, editLabel, editingHandle, fadeInLabel, fadeOutLabel, hoveredHandle]);
-  const handleTop = '-2px';
-  const activeCurveDot = curveEditingHandle === 'in'
-    ? fadeInCurveDot
-    : curveEditingHandle === 'out'
-    ? fadeOutCurveDot
+  const visibleLabel = hoveredHandle === 'in'
+    ? fadeInLabel
+    : hoveredHandle === 'out'
+    ? fadeOutLabel
     : null;
+  const handleTop = '-2px';
 
   const getHandleClassName = () => {
     return cn(
@@ -133,7 +120,7 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
             e.stopPropagation();
             onFadeCurveDotDoubleClick('in');
           }}
-          onMouseEnter={() => setHoveredHandle('in')}
+          onMouseEnter={() => setHoveredHandle(null)}
           onMouseLeave={() => setHoveredHandle((current) => (current === 'in' ? null : current))}
           aria-label="Adjust audio fade in curve"
         />
@@ -149,7 +136,7 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
             e.stopPropagation();
             onFadeCurveDotDoubleClick('out');
           }}
-          onMouseEnter={() => setHoveredHandle('out')}
+          onMouseEnter={() => setHoveredHandle(null)}
           onMouseLeave={() => setHoveredHandle((current) => (current === 'out' ? null : current))}
           aria-label="Adjust audio fade out curve"
         />
@@ -158,7 +145,7 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
       {visibleLabelHandle && visibleLabel && (
         <div
           className="absolute -translate-x-1/2 rounded bg-slate-950/95 px-1.5 py-0.5 text-[10px] font-medium text-white shadow-lg whitespace-nowrap"
-          style={{ left: `${activeCurveDot?.x ?? activeLeft}px`, top: `calc(${activeCurveDot?.yPercent ?? lineYPercent}% + 10px)` }}
+          style={{ left: `${activeLeft}px`, top: `calc(${lineYPercent}% + 10px)` }}
         >
           {visibleLabel}
         </div>

@@ -1311,13 +1311,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     () => item.type === 'audio' ? getAudioFadePixels(displayedAudioFadeOut, fps, frameToPixels, visualWidth) : 0,
     [displayedAudioFadeOut, fps, frameToPixels, item.type, visualWidth]
   );
-  const audioFadeEditLabel = useMemo(() => {
-    if (!audioFadeEdit) return null;
-    const seconds = audioFadeEdit.handle === 'in'
-      ? audioFadeEdit.previewFadeIn
-      : audioFadeEdit.previewFadeOut;
-    return `${audioFadeEdit.handle === 'in' ? 'Fade In' : 'Fade Out'} ${seconds.toFixed(2)}s`;
-  }, [audioFadeEdit]);
   const audioFadeInHoverLabel = useMemo(
     () => `Fade In ${displayedAudioFadeIn.toFixed(2)}s`,
     [displayedAudioFadeIn]
@@ -1326,16 +1319,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     () => `Fade Out ${displayedAudioFadeOut.toFixed(2)}s`,
     [displayedAudioFadeOut]
   );
-  const audioFadeCurveEditLabel = useMemo(() => {
-    if (!audioFadeCurveEdit) return null;
-    const curve = audioFadeCurveEdit.handle === 'in'
-      ? audioFadeCurveEdit.previewFadeInCurve
-      : audioFadeCurveEdit.previewFadeOutCurve;
-    const curveX = audioFadeCurveEdit.handle === 'in'
-      ? audioFadeCurveEdit.previewFadeInCurveX
-      : audioFadeCurveEdit.previewFadeOutCurveX;
-    return `Curve ${curve.toFixed(2)} / X ${curveX.toFixed(2)}`;
-  }, [audioFadeCurveEdit]);
   const audioVolumeEditLabel = useMemo(() => {
     if (!audioVolumeEdit) return null;
     return `Volume ${displayedAudioVolumeDb >= 0 ? '+' : ''}${displayedAudioVolumeDb.toFixed(1)} dB`;
@@ -1977,10 +1960,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 fadeOutPixels={audioFadeOutPixels}
                 isSelected={isSelected}
                 isEditing={audioFadeEdit !== null}
-                editingHandle={audioFadeEdit?.handle ?? null}
                 curveEditingHandle={audioFadeCurveEdit?.handle ?? null}
-                editLabel={audioFadeEditLabel}
-                curveEditLabel={audioFadeCurveEditLabel}
                 fadeInLabel={audioFadeInHoverLabel}
                 fadeOutLabel={audioFadeOutHoverLabel}
                 fadeInCurveDot={audioFadeInPixels > 0 ? { x: audioFadeInCurvePoint.x, yPercent: audioFadeInCurvePoint.y } : null}
