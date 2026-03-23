@@ -434,15 +434,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const fps = useTimelineStore((s) => s.fps);
   const updateTimelineItem = useTimelineStore((s) => s.updateItem);
 
-  // Committed transition overlap for this item (store-indexed lookup).
-  // right: this item is LEFT in a transition, left: this item is RIGHT.
-  const committedOverlapRight = useTransitionsStore(
-    useCallback((s) => s.transitionOverlapByItemId[item.id]?.right ?? 0, [item.id])
-  );
-  const committedOverlapLeft = useTransitionsStore(
-    useCallback((s) => s.transitionOverlapByItemId[item.id]?.left ?? 0, [item.id])
-  );
-
   // Smart per-concern selectors for transition resize preview.
   // Return primitives so unaffected clips always get 0 (stable, no re-render).
 
@@ -572,11 +563,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }, [slideRightNeighborIdForSlidItem])
   );
 
-  // Merge preview + committed overlap for the right edge (this clip is LEFT in a transition)
-  const overlapRight = previewOverlapRight > 0 ? previewOverlapRight : committedOverlapRight;
-
-  // Merge preview + committed overlap for the left edge (this clip is RIGHT in a transition)
-  const overlapLeft = previewOverlapLeft > 0 ? previewOverlapLeft : committedOverlapLeft;
+  const previewBridgeRightPortion = previewOverlapRight;
+  const previewBridgeLeftPortion = previewOverlapLeft;
 
   const transitionDropGhost = useMemo(() => {
     if (!transitionDragPreview || !transitionDragPreviewRightClip) return null;
@@ -599,11 +587,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       left,
       width: Math.max(naturalWidth, minWidth),
       cutOffset: cutPx - left,
-      durationLabel: `${(transitionDragPreview.durationInFrames / fps).toFixed(1)}s`,
     };
   }, [
     frameToPixels,
-    fps,
     item.durationInFrames,
     item.from,
     transitionDragPreview,
@@ -611,7 +597,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   ]);
 
   // Calculate position and width (convert frames to seconds, then to pixels)
-  // Display width hides overlap from both edges so the visual junction is centered.
+  // Clip edges stay at their true cut positions; transition bridges render as an overlay.
   // Fold overlap + ripple + slide into the frame value BEFORE rounding so both clip edges
   // derive from a single Math.round - avoids 1px gaps from independent rounding
   // (Math.round(A) + Math.round(B) != Math.round(A + B)).
@@ -625,12 +611,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     (slideNeighborSide === 'left' ? slideNeighborDelta : 0)
     + (slideNeighborSide === 'right' ? -slideNeighborDelta : 0);
 
-  const left = Math.round(timeToPixels((item.from + slideFromOffset + overlapLeft + rippleEditOffset) / fps));
-  const right = Math.round(timeToPixels((item.from + item.durationInFrames + slideDurationOffset - overlapRight + slideFromOffset + rippleEditOffset) / fps));
+  const left = Math.round(timeToPixels((item.from + slideFromOffset + rippleEditOffset) / fps));
+  const right = Math.round(timeToPixels((item.from + item.durationInFrames + slideDurationOffset + slideFromOffset + rippleEditOffset) / fps));
   const width = right - left;
-  // Pixel offset for inner content shift (filmstrip alignment) â€” independent rounding is fine
-  // here since it only affects content within this clip, not cross-clip alignment.
-  const overlapLeftPixels = Math.round(timeToPixels(overlapLeft / fps));
 
   // Calculate trim visual feedback
   const minWidthPixels = timeToPixels(1 / fps);
@@ -752,12 +735,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     effectiveSourceFps,
   ]);
 
-  // Use preview duration for overlapped content width so filmstrip/waveform
-  // resizing stays in sync for transition-bridge clips during edit previews.
-  const previewFullWidthPixels = Math.round(
-    timeToPixels(contentPreviewItem.durationInFrames / fps),
-  );
-
   // During edit previews, prioritize visual sync over deferred rendering so
   // filmstrip growth keeps up with the edit gesture.
   const preferImmediateContentRendering =
@@ -783,7 +760,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     // by even 1 px.  `rippleEdgeDelta` equals the downstream `rippleEditOffset`.
     if (rippleEdgeDelta !== 0) {
       const newRight = Math.round(
-        timeToPixels((item.from + item.durationInFrames + rippleEdgeDelta - overlapRight) / fps)
+        timeToPixels((item.from + item.durationInFrames + rippleEdgeDelta) / fps)
       );
       trimVisualWidth = newRight - trimVisualLeft;
     } else if (isTrimming) {
@@ -861,7 +838,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     left, width, isTrimming, trimHandle, isStretching, stretchFeedback,
     canExtendInfinitely, currentSourceStart, currentSpeed, effectiveSourceFps, item.from, item.durationInFrames,
     timeToPixels, fps, minWidthPixels, trimDeltaPixels, sourceDuration, currentSourceEnd,
-    subCompDuration, rollingEditDelta, rollingEditHandle, rippleEdgeDelta, overlapRight
+    subCompDuration, rollingEditDelta, rollingEditHandle, rippleEdgeDelta
   ]);
 
   // Visibility detection for lazy filmstrip loading (shared viewport state)
@@ -2059,34 +2036,17 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
               </div>
             )}
 
-            {/* Clip visual content â€” offset when left-trimmed so filmstrip aligns correctly */}
-            {overlapLeftPixels > 0 ? (
-              <div className="absolute inset-0" style={{ left: -overlapLeftPixels, width: previewFullWidthPixels }}>
-                <ClipContent
-                  item={contentVisualPreviewItem}
-                  clipWidth={previewFullWidthPixels}
-                  fps={fps}
-                  isClipVisible={clipVisibility.isVisible}
-                  visibleStartRatio={clipVisibility.visibleStartRatio}
-                  visibleEndRatio={clipVisibility.visibleEndRatio}
-                  pixelsPerSecond={pixelsPerSecond}
-                  preferImmediateRendering={preferImmediateContentRendering}
-                  audioWaveformScale={audioVisualizationScale}
-                />
-              </div>
-            ) : (
-              <ClipContent
-                item={contentVisualPreviewItem}
-                clipWidth={visualWidth}
-                fps={fps}
-                isClipVisible={clipVisibility.isVisible}
-                visibleStartRatio={clipVisibility.visibleStartRatio}
-                visibleEndRatio={clipVisibility.visibleEndRatio}
-                pixelsPerSecond={pixelsPerSecond}
-                preferImmediateRendering={preferImmediateContentRendering}
-                audioWaveformScale={audioVisualizationScale}
-              />
-            )}
+            <ClipContent
+              item={contentVisualPreviewItem}
+              clipWidth={visualWidth}
+              fps={fps}
+              isClipVisible={clipVisibility.isVisible}
+              visibleStartRatio={clipVisibility.visibleStartRatio}
+              visibleEndRatio={clipVisibility.visibleEndRatio}
+              pixelsPerSecond={pixelsPerSecond}
+              preferImmediateRendering={preferImmediateContentRendering}
+              audioWaveformScale={audioVisualizationScale}
+            />
 
             {/* Status indicators */}
             <ClipIndicators
@@ -2200,70 +2160,43 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
       {transitionDropGhost && (
         <div
-          className="absolute inset-y-0 pointer-events-none overflow-hidden rounded-sm border border-slate-200/70 shadow-[0_8px_20px_rgba(15,23,42,0.22)]"
+          className="absolute inset-y-0 pointer-events-none overflow-hidden rounded-sm border border-slate-100/80 shadow-[0_8px_20px_rgba(15,23,42,0.18)]"
           style={{
             left: `${transitionDropGhost.left}px`,
             width: `${transitionDropGhost.width}px`,
             zIndex: 35,
-            background: 'linear-gradient(180deg, rgba(248,250,252,0.18), rgba(148,163,184,0.18))',
+            background: 'rgba(248,250,252,0.08)',
             backdropFilter: 'blur(2px)',
           }}
         >
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(226,232,240,0.16),rgba(148,163,184,0.1)_48%,rgba(148,163,184,0.1)_52%,rgba(226,232,240,0.16))]" />
-          <div
-            className="absolute inset-y-0 bg-[linear-gradient(90deg,rgba(226,232,240,0.22),rgba(148,163,184,0.05))]"
-            style={{ width: `${Math.max(0, transitionDropGhost.cutOffset)}px` }}
-          />
-          <div
-            className="absolute inset-y-0 right-0 bg-[linear-gradient(270deg,rgba(226,232,240,0.22),rgba(148,163,184,0.05))]"
-            style={{ width: `${Math.max(0, transitionDropGhost.width - transitionDropGhost.cutOffset)}px` }}
-          />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(248,250,252,0.08),rgba(255,255,255,0.02)_48%,rgba(255,255,255,0.02)_52%,rgba(248,250,252,0.08))]" />
           <div
             className="absolute top-0 bottom-0 w-px bg-slate-50/90"
             style={{ left: `${transitionDropGhost.cutOffset}px` }}
           />
           <div className="absolute inset-x-0 top-0 h-px bg-white/60" />
           <div className="absolute inset-x-0 bottom-0 h-px bg-slate-900/20" />
-          {transitionDropGhost.width >= 38 && (
-            <div
-              className="absolute top-1/2 -translate-y-1/2"
-              style={{ left: `${Math.max(6, transitionDropGhost.cutOffset - 8)}px` }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5 text-slate-50/90 drop-shadow">
-                <path d="M4 6 L12 12 L4 18 Z" fill="currentColor" />
-                <path d="M20 6 L12 12 L20 18 Z" fill="currentColor" />
-              </svg>
-            </div>
-          )}
-          {transitionDropGhost.width >= 58 && (
-            <div
-              className="absolute top-1/2 -translate-y-1/2 rounded-sm border border-slate-100/40 bg-slate-900/45 px-1.5 py-0.5 text-[10px] font-medium text-slate-50/95"
-              style={{ left: `${Math.max(6, transitionDropGhost.cutOffset + 8)}px` }}
-            >
-              {transitionDropGhost.durationLabel}
-            </div>
-          )}
         </div>
       )}
 
       {/* Transition resize ghost overlays â€” show overlap zones during resize */}
-      {previewOverlapRight > 0 && (
+      {previewBridgeRightPortion > 0 && (
         <div
           className="absolute inset-y-0 rounded-r pointer-events-none"
           style={{
             left: visualLeft + visualWidth,
-            width: Math.round(timeToPixels(overlapRight / fps)),
-            background: 'linear-gradient(90deg, rgba(168,85,247,0.2), rgba(168,85,247,0.08))',
+            width: Math.round(timeToPixels(previewBridgeRightPortion / fps)),
+            background: 'linear-gradient(90deg, rgba(148,163,184,0.16), rgba(148,163,184,0.04))',
           }}
         />
       )}
-      {previewOverlapLeft > 0 && (
+      {previewBridgeLeftPortion > 0 && (
         <div
           className="absolute inset-y-0 rounded-l pointer-events-none"
           style={{
-            left: visualLeft - Math.round(timeToPixels(overlapLeft / fps)),
-            width: Math.round(timeToPixels(overlapLeft / fps)),
-            background: 'linear-gradient(270deg, rgba(168,85,247,0.2), rgba(168,85,247,0.08))',
+            left: visualLeft - Math.round(timeToPixels(previewBridgeLeftPortion / fps)),
+            width: Math.round(timeToPixels(previewBridgeLeftPortion / fps)),
+            background: 'linear-gradient(270deg, rgba(148,163,184,0.16), rgba(148,163,184,0.04))',
           }}
         />
       )}

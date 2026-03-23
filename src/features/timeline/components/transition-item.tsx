@@ -38,9 +38,8 @@ interface TransitionItemProps {
 /**
  * Transition Item Component
  *
- * Renders a CapCut-style transition overlay between adjacent clips.
- * Shows the transition region spanning both clips (fade out from left, fade in to right).
- * Displays duration and transition type.
+ * Renders a cut-centered transition bridge overlay between adjacent clips.
+ * The clips keep their full visual width under the bridge, similar to DaVinci.
  */
 // Width in pixels for edge hover detection (resize handles)
 const EDGE_HOVER_ZONE = 6;
@@ -426,7 +425,6 @@ export const TransitionItem = memo(function TransitionItem({
     return null;
   }
 
-  // Get presentation label
   const presentationLabel = transition.presentation?.charAt(0).toUpperCase() + transition.presentation?.slice(1) || 'Fade';
 
   // Determine cursor based on hover state
@@ -438,7 +436,7 @@ export const TransitionItem = memo(function TransitionItem({
         <div
           ref={containerRef}
           className={cn(
-            'absolute inset-y-0 overflow-hidden rounded-sm',
+            'absolute inset-y-0 overflow-visible rounded-sm pointer-events-none',
             isSelected &&
               'ring-2 ring-inset ring-primary',
             dragPreviewMatches && 'ring-2 ring-inset ring-amber-300',
@@ -449,55 +447,46 @@ export const TransitionItem = memo(function TransitionItem({
             width: `${position.width}px`,
             zIndex: isResizing ? 50 : 10,
             opacity: trackHidden ? 0.3 : undefined,
-            cursor,
           }}
-          onMouseDown={handleMouseDown}
-          onClick={handleClick}
-          onMouseMove={handleMouseMove}
-          onMouseLeave={handleMouseLeave}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
           title={`${presentationLabel} (${durationSec}s)`}
         >
-          {/* CapCut-style transition region overlay - more transparent */}
           <div
             className={cn(
-              'flex h-full w-full items-center justify-center gap-1 px-1.5',
-              'bg-gradient-to-r from-purple-500/22 via-purple-400/46 to-purple-500/22',
-              'border border-purple-400/35',
-              'shadow-[inset_0_1px_0_rgba(255,255,255,0.12),inset_0_-1px_0_rgba(255,255,255,0.06)]',
-              'hover:from-purple-500/28 hover:via-purple-400/54 hover:to-purple-500/28',
-              'hover:border-purple-400/50'
+              'pointer-events-none relative h-full w-full rounded-sm border',
+              'border-slate-100/80 bg-slate-100/10',
+              'shadow-[inset_0_0_0_1px_rgba(15,23,42,0.18),0_0_0_1px_rgba(15,23,42,0.04)]',
+              'backdrop-blur-[1px]',
+              'hover:bg-slate-100/14 hover:border-slate-50/90'
             )}
           >
-            {/* Bowtie icon - hide when too small */}
-            {position.width >= 24 && (
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                className="w-3.5 h-3.5 flex-shrink-0"
-              >
-                <path d="M4 6 L12 12 L4 18 Z" fill="white" fillOpacity="0.7" />
-                <path d="M20 6 L12 12 L20 18 Z" fill="white" fillOpacity="0.7" />
-              </svg>
-            )}
-            {/* Duration label - only show if enough width */}
-            {position.width >= 50 && (
-              <span className="text-[10px] text-white/80 font-medium truncate">
-                {durationSec}s
-              </span>
-            )}
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(248,250,252,0.1),rgba(255,255,255,0.03)_48%,rgba(255,255,255,0.03)_52%,rgba(248,250,252,0.1))]" />
+            <div className="absolute inset-x-0 top-0 h-px bg-slate-50/70" />
+            <div className="absolute inset-x-0 bottom-0 h-px bg-slate-900/15" />
+            <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-slate-50/90" />
           </div>
+
+          <div
+            className="absolute inset-x-0 top-0 h-3 pointer-events-auto"
+            style={{ cursor }}
+            onMouseDown={handleMouseDown}
+            onClick={handleClick}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          />
 
           {/* Left resize handle */}
           <div
             className={cn(
-              'absolute left-0 top-0 bottom-0 w-1.5 bg-purple-400 cursor-ew-resize rounded-l',
+              'absolute left-0 top-0 h-3 w-2 bg-slate-100/85 cursor-ew-resize rounded-tl pointer-events-auto',
               hoveredEdge === 'left' || (isResizing && resizeHandle === 'left')
                 ? 'opacity-100'
                 : 'opacity-0'
             )}
+            onMouseEnter={() => setHoveredEdge('left')}
+            onMouseLeave={() => setHoveredEdge(null)}
             onMouseDown={(e) => handleResizeStart(e, 'left')}
             onMouseUp={stopEvent}
             onClick={stopEvent}
@@ -506,11 +495,13 @@ export const TransitionItem = memo(function TransitionItem({
           {/* Right resize handle */}
           <div
             className={cn(
-              'absolute right-0 top-0 bottom-0 w-1.5 bg-purple-400 cursor-ew-resize rounded-r',
+              'absolute right-0 top-0 h-3 w-2 bg-slate-100/85 cursor-ew-resize rounded-tr pointer-events-auto',
               hoveredEdge === 'right' || (isResizing && resizeHandle === 'right')
                 ? 'opacity-100'
                 : 'opacity-0'
             )}
+            onMouseEnter={() => setHoveredEdge('right')}
+            onMouseLeave={() => setHoveredEdge(null)}
             onMouseDown={(e) => handleResizeStart(e, 'right')}
             onMouseUp={stopEvent}
             onClick={stopEvent}
