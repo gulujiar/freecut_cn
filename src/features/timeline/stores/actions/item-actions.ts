@@ -15,7 +15,7 @@ import {
   opfsService,
 } from '@/features/timeline/deps/media-library-service';
 import { toast } from 'sonner';
-import { execute, applyTransitionRepairs, logger } from './shared';
+import { execute, applyTransitionRepairs, getLogger } from './shared';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
@@ -857,7 +857,7 @@ export async function insertFreezeFrame(
   const mediaItems = useMediaLibraryStore.getState().mediaItems;
   const media = mediaItems.find((m) => m.id === item.mediaId);
   if (!media) {
-    logger.error('[insertFreezeFrame] Media not found for item:', item.mediaId);
+    getLogger().error('[insertFreezeFrame] Media not found for item:', item.mediaId);
     return false;
   }
 
@@ -869,7 +869,7 @@ export async function insertFreezeFrame(
     // Step 1: Get the media file blob
     const blob = await mediaLibraryService.getMediaFile(media.id);
     if (!blob) {
-      logger.error('[insertFreezeFrame] Could not access media file');
+      getLogger().error('[insertFreezeFrame] Could not access media file');
       return false;
     }
 
@@ -883,7 +883,7 @@ export async function insertFreezeFrame(
     const videoTrack = await input.getPrimaryVideoTrack();
     if (!videoTrack) {
       input.dispose();
-      logger.error('[insertFreezeFrame] No video track found');
+      getLogger().error('[insertFreezeFrame] No video track found');
       return false;
     }
 
@@ -900,7 +900,7 @@ export async function insertFreezeFrame(
     if (!wrapped) {
       (sink as unknown as { dispose?: () => void }).dispose?.();
       input.dispose();
-      logger.error('[insertFreezeFrame] Failed to extract frame');
+      getLogger().error('[insertFreezeFrame] Failed to extract frame');
       return false;
     }
 
@@ -925,7 +925,7 @@ export async function insertFreezeFrame(
     const { createMedia, saveThumbnail, associateMediaWithProject } = await import('@/infrastructure/storage/indexeddb');
     const currentProjectId = useMediaLibraryStore.getState().currentProjectId;
     if (!currentProjectId) {
-      logger.error('[insertFreezeFrame] No project context');
+      getLogger().error('[insertFreezeFrame] No project context');
       return false;
     }
 
@@ -983,7 +983,7 @@ export async function insertFreezeFrame(
       // Split the video at playhead
       const splitResult = useItemsStore.getState()._splitItem(itemId, playheadFrame);
       if (!splitResult) {
-        logger.error('[insertFreezeFrame] Split failed');
+        getLogger().error('[insertFreezeFrame] Split failed');
         return;
       }
 
@@ -1046,7 +1046,7 @@ export async function insertFreezeFrame(
 
     return true;
   } catch (error) {
-    logger.error('[insertFreezeFrame] Failed:', error);
+    getLogger().error('[insertFreezeFrame] Failed:', error);
     return false;
   }
 }

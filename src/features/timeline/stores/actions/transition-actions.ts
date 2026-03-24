@@ -22,7 +22,7 @@ import {
   areFramesAligned,
   getMaxTransitionDurationForHandles,
 } from '../../utils/transition-utils';
-import { execute, logger } from './shared';
+import { execute, getLogger } from './shared';
 
 export function addTransition(
   leftClipId: string,
@@ -40,13 +40,13 @@ export function addTransition(
     const rightClip = items.find((i) => i.id === rightClipId);
 
     if (!leftClip || !rightClip) {
-      logger.warn('[addTransition] Clips not found');
+      getLogger().warn('[addTransition] Clips not found');
       return false;
     }
 
     const maxByClipDuration = Math.floor(Math.min(leftClip.durationInFrames, rightClip.durationInFrames) - 1);
     if (maxByClipDuration < 1) {
-      logger.warn('[addTransition] Cannot add transition: clips are too short');
+      getLogger().warn('[addTransition] Cannot add transition: clips are too short');
       return false;
     }
 
@@ -59,7 +59,7 @@ export function addTransition(
     if (isAdjacent) {
       const maxHandleDuration = getMaxTransitionDurationForHandles(leftClip, rightClip, 0.5);
       if (maxHandleDuration < 1) {
-        logger.warn('[addTransition] Cannot add transition: insufficient source handle at cut');
+        getLogger().warn('[addTransition] Cannot add transition: insufficient source handle at cut');
         return false;
       }
       duration = Math.min(duration, maxHandleDuration);
@@ -68,7 +68,7 @@ export function addTransition(
     // Validate that transition can be added (includes handle check)
     const validation = canAddTransition(leftClip, rightClip, duration, 0.5);
     if (!validation.canAdd) {
-      logger.warn('[addTransition] Cannot add transition:', validation.reason);
+      getLogger().warn('[addTransition] Cannot add transition:', validation.reason);
       return false;
     }
 
@@ -77,7 +77,7 @@ export function addTransition(
       (t) => t.leftClipId === leftClipId && t.rightClipId === rightClipId
     );
     if (existingTransition) {
-      logger.warn('[addTransition] Transition already exists between these clips');
+      getLogger().warn('[addTransition] Transition already exists between these clips');
       return false;
     }
 
@@ -118,7 +118,7 @@ export function updateTransition(
         nextTransition.alignment,
       );
       if (!validation.canAdd) {
-        logger.warn('[updateTransition] Cannot update transition:', validation.reason);
+        getLogger().warn('[updateTransition] Cannot update transition:', validation.reason);
         return;
       }
     }

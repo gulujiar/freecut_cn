@@ -15,7 +15,7 @@ import { mediaLibraryService } from '@/features/timeline/deps/media-library-serv
 import { getMediaType } from '@/features/timeline/deps/media-library-resolver';
 import { toast } from 'sonner';
 import { computeInitialTransform } from '../../utils/transform-init';
-import { execute, applyTransitionRepairs, logger } from './shared';
+import { execute, applyTransitionRepairs, getLogger } from './shared';
 import { resolveSourceEditTrackTargets } from '../../utils/source-edit-targeting';
 
 interface SourceEditContext {
@@ -59,7 +59,7 @@ async function resolveSourceEditContext(): Promise<SourceEditContext | null> {
   const tracks = useItemsStore.getState().tracks;
   const track = tracks.find((t) => t.id === activeTrackId);
   if (!track) {
-    logger.warn('Source edit: Active track not found');
+    getLogger().warn('Source edit: Active track not found');
     return null;
   }
   if (track.locked) {
@@ -70,13 +70,13 @@ async function resolveSourceEditContext(): Promise<SourceEditContext | null> {
   const mediaItems = useMediaLibraryStore.getState().mediaItems;
   const media = mediaItems.find((m) => m.id === sourceMediaId);
   if (!media) {
-    logger.warn('Source edit: Source media not found');
+    getLogger().warn('Source edit: Source media not found');
     return null;
   }
 
   const mediaType = getMediaType(media.mimeType);
   if (mediaType === 'unknown') {
-    logger.warn('Source edit: Unknown media type');
+    getLogger().warn('Source edit: Unknown media type');
     return null;
   }
 

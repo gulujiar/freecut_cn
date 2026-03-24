@@ -10,12 +10,15 @@ import { useTransitionsStore } from '../transitions-store';
 import { repairTransitions } from '../../utils/transition-auto-repair';
 import { isFrameInTransitionRegion } from '@/features/timeline/deps/keyframes';
 
-export const logger = createLogger('TimelineActions');
+// Use function declarations (not const) to avoid temporal dead zone errors
+// in production chunk ordering — see CLAUDE.md gotchas.
+export function getLogger() {
+  return createLogger('TimelineActions');
+}
 
-/** Helper to get execute function */
-export const execute = <T>(type: string, action: () => T, payload?: Record<string, unknown>): T => {
+export function execute<T>(type: string, action: () => T, payload?: Record<string, unknown>): T {
   return useTimelineCommandStore.getState().execute({ type, payload }, action);
-};
+}
 
 /**
  * Apply transition repair results to the store.
@@ -41,7 +44,7 @@ export function applyTransitionRepairs(
   // Log repairs
   if (repaired.length > 0) {
     for (const r of repaired) {
-      logger.info(`[TransitionRepair] ${r.action}`);
+      getLogger().info(`[TransitionRepair] ${r.action}`);
     }
   }
 
