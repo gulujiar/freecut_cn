@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { VideoItem, ImageItem } from '@/types/timeline';
-import { areFramesAligned, areFramesOverlapping, canAddTransition } from './transition-utils';
+import type { Transition } from '@/types/transition';
+import {
+  areFramesAligned,
+  areFramesOverlapping,
+  canAddTransition,
+  clampRippleTrimDeltaToPreserveTransition,
+} from './transition-utils';
 
 function createVideoClip(
   id: string,
@@ -33,6 +39,19 @@ function createImageClip(id: string, from: number, durationInFrames: number): Im
     durationInFrames,
     label: id,
     src: `${id}.jpg`,
+  };
+}
+
+function createTransition(leftClipId: string, rightClipId: string, durationInFrames: number): Transition {
+  return {
+    id: 'tr-1',
+    leftClipId,
+    rightClipId,
+    trackId: 'track-1',
+    type: 'crossfade',
+    durationInFrames,
+    presentation: 'fade',
+    timing: 'linear',
   };
 }
 
@@ -109,5 +128,29 @@ describe('transition-utils', () => {
     const result = canAddTransition(left, right, 25);
     expect(result.canAdd).toBe(false);
     expect(result.reason).toContain('Transition too long');
+  });
+
+  it('clamps ripple end trims so an existing transition keeps enough tail handle', () => {
+    const left = createVideoClip('A', 0, 100, 0, 80, 100);
+    const right = createVideoClip('B', 100, 100, 40, 140, 200);
+    const transition = createTransition('A', 'B', 30);
+
+    expect(clampRippleTrimDeltaToPreserveTransition(left, 'end', 10, right, transition)).toBe(5);
+  });
+
+  it('clamps ripple start extensions so an existing transition keeps enough head handle', () => {
+    const left = createVideoClip('A', 0, 100, 30, 130, 200);
+    const right = createVideoClip('B', 100, 100, 20, 120, 160);
+    const transition = createTransition('A', 'B', 30);
+
+    expect(clampRippleTrimDeltaToPreserveTransition(right, 'start', -10, left, transition)).toBe(-5);
+  });
+
+  it('clamps ripple trims so an existing transition never exceeds the trimmed clip duration', () => {
+    const left = createVideoClip('A', 0, 40, 0, 40, 120);
+    const right = createVideoClip('B', 40, 100, 60, 160, 220);
+    const transition = createTransition('A', 'B', 30);
+
+    expect(clampRippleTrimDeltaToPreserveTransition(left, 'end', -20, right, transition)).toBe(-9);
   });
 });

@@ -16,9 +16,10 @@
  */
 
 import type { TimelineItem } from '@/types/timeline';
-import type { CanAddTransitionResult } from '@/types/transition';
+import type { CanAddTransitionResult, Transition } from '@/types/transition';
 import { getSourceProperties, sourceToTimelineFrames, getAvailableSourceFrames } from './source-calculations';
 import { calculateTransitionPortions } from '@/domain/timeline/transitions/transition-planner';
+import { calculateTrimSourceUpdate, type TrimHandle } from './trim-utils';
 
 const FRAME_EPSILON = 1;
 
@@ -123,6 +124,52 @@ export function canAddTransition(
   return { canAdd: true, leftHandle, rightHandle };
 }
 
+export function clampRippleTrimDeltaToPreserveTransition(
+  item: TimelineItem,
+  handle: TrimHandle,
+  requestedDelta: number,
+  neighbor: TimelineItem | null,
+  transition: Transition | null,
+  timelineFps: number = 30,
+): number {
+  if (!transition || !neighbor || requestedDelta === 0) return requestedDelta;
+
+  const editsLeftClip = transition.leftClipId === item.id && handle === 'end';
+  const editsRightClip = transition.rightClipId === item.id && handle === 'start';
+  if (!editsLeftClip && !editsRightClip) return requestedDelta;
+
+  const isValid = (delta: number): boolean => {
+    if (editsLeftClip) {
+      const leftClip = applyRippleTrimPreview(item, 'end', delta, timelineFps);
+      const rightClip = { ...neighbor, from: neighbor.from + delta };
+      return canAddTransition(leftClip, rightClip, transition.durationInFrames, transition.alignment).canAdd;
+    }
+
+    const leftClip = neighbor;
+    const rightClip = applyRippleTrimPreview(item, 'start', delta, timelineFps);
+    return canAddTransition(leftClip, rightClip, transition.durationInFrames, transition.alignment).canAdd;
+  };
+
+  if (!isValid(0)) return 0;
+  if (isValid(requestedDelta)) return requestedDelta;
+
+  const sign = requestedDelta < 0 ? -1 : 1;
+  let low = 0;
+  let high = Math.abs(requestedDelta);
+
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = sign * mid;
+    if (isValid(candidate)) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return sign * low;
+}
+
 /**
  * Calculate available handle frames on a clip.
  * Handle = unused source media beyond the current trim points.
@@ -163,4 +210,34 @@ export function getAvailableHandle(
     const availableAfter = getAvailableSourceFrames(effectiveSourceDuration, effectiveSourceEnd);
     return sourceToTimelineFrames(availableAfter, speed);
   }
+}
+
+function applyRippleTrimPreview(
+  item: TimelineItem,
+  handle: TrimHandle,
+  trimDelta: number,
+  timelineFps: number,
+): TimelineItem {
+  const nextDuration = Math.max(
+    1,
+    handle === 'start'
+      ? item.durationInFrames - trimDelta
+      : item.durationInFrames + trimDelta,
+  );
+  const sourceUpdate = calculateTrimSourceUpdate(item, handle, trimDelta, nextDuration, timelineFps);
+
+  if (handle === 'start') {
+    return {
+      ...item,
+      durationInFrames: nextDuration,
+      from: item.from,
+      ...sourceUpdate,
+    };
+  }
+
+  return {
+    ...item,
+    durationInFrames: nextDuration,
+    ...sourceUpdate,
+  };
 }

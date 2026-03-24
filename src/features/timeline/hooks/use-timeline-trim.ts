@@ -30,6 +30,8 @@ import {
   applyTrimStartPreview,
   type PreviewItemUpdate,
 } from '../utils/item-edit-preview';
+import { clampRippleTrimDeltaToPreserveTransition } from '../utils/transition-utils';
+import { getTransitionBridgeAtHandle } from '../utils/transition-edit-guards';
 
 interface TrimState {
   isTrimming: boolean;
@@ -294,6 +296,30 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
             constraintLabel = 'cut limit';
             deltaFrames = neighborClamped;
           }
+        }
+      }
+
+      if (isRippleEdit && !trimStateRef.current.destroyTransitionAtHandle) {
+        const transitionAtHandle = getTransitionBridgeAtHandle(transitions, currentItem.id, handle!);
+        const neighborAtHandle = transitionAtHandle
+          ? allItems.find((candidate) => (
+              handle === 'end'
+                ? candidate.id === transitionAtHandle.rightClipId
+                : candidate.id === transitionAtHandle.leftClipId
+            )) ?? null
+          : null;
+        const transitionClamped = clampRippleTrimDeltaToPreserveTransition(
+          currentItem,
+          handle!,
+          deltaFrames,
+          neighborAtHandle,
+          transitionAtHandle,
+          fps,
+        );
+        if (transitionClamped !== deltaFrames) {
+          isConstrained = true;
+          constraintLabel = 'transition limit';
+          deltaFrames = transitionClamped;
         }
       }
 
