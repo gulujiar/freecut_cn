@@ -134,6 +134,7 @@ function normalizeTransition(
     ...transition,
     // Ensure duration is at least 1 frame
     durationInFrames: Math.max(1, Math.round(transition.durationInFrames)),
+    timing: transition.timing ?? 'linear',
   };
 }
 
