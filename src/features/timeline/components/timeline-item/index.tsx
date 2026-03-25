@@ -53,6 +53,7 @@ import {
   getTimelineItemGestureMode,
   shouldDimTimelineItemForDrag,
 } from './drag-visual-mode';
+import { getTimelineClipLabelRowHeightPx } from './hover-layout';
 import {
   getSlideOperationBoundsVisual,
   getSlipOperationBoundsVisual,
@@ -1193,7 +1194,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       const nextBodyIntent = resolveSmartBodyIntent({
         y,
         height: rect.height,
-        labelRowHeight: parseFloat(EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight),
+        labelRowHeight: getTimelineClipLabelRowHeightPx(e.currentTarget),
         isMediaItem: item.type === 'video' || item.type === 'audio' || item.type === 'composition',
         currentIntent: smartBodyIntentRef.current,
       });
