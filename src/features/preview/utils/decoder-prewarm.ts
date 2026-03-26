@@ -5,8 +5,11 @@
  * decode off the main thread. Workers return decoded ImageBitmaps that
  * the render loop can draw directly — zero main-thread WASM work.
  *
- * Pool size: 3 workers allows parallel decode of transition pairs
- * (both clips simultaneously) plus a spare for background preseek.
+ * Pool size scales with hardware concurrency: min 3, max 6.
+ * Each worker loads its own mediabunny WASM instance (~2MB), so we cap
+ * at 6 to avoid excessive memory pressure. 3 covers transition pairs
+ * (left + right clips) plus a spare; extra workers help when multiple
+ * transitions or jump preseeks overlap.
  *
  * This eliminates the 300-500ms keyframe seek stall when occluded variable-
  * speed clips become visible mid-playback.
@@ -18,7 +21,8 @@ import { getKeyframeTimestamps } from '@/shared/utils/keyframe-index-registry';
 const log = createLogger('DecoderPrewarm');
 const MAX_CACHED_BITMAPS_PER_SOURCE = 6;
 const PRESEEK_REQUEST_REUSE_TOLERANCE_SECONDS = 1 / 240;
-const WORKER_POOL_SIZE = 3;
+/** Min 3 (transition pair + spare), max 6 (memory cap ~12MB WASM) */
+const WORKER_POOL_SIZE = Math.max(3, Math.min(6, Math.floor((navigator.hardwareConcurrency ?? 4) / 2)));
 
 export interface DecoderPrewarmMetricsSnapshot {
   requests: number;
