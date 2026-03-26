@@ -40,7 +40,7 @@ import {
 } from './canvas-effects';
 import { EffectsPipeline } from '@/infrastructure/gpu/effects';
 import { TransitionPipeline } from '@/infrastructure/gpu/transitions';
-import { CompositorPipeline, DEFAULT_LAYER_PARAMS } from '@/infrastructure/gpu/compositor';
+import { CompositorPipeline, DEFAULT_LAYER_PARAMS, GpuTexturePool } from '@/infrastructure/gpu/compositor';
 import type { CompositeLayer } from '@/infrastructure/gpu/compositor';
 import { MaskTextureManager } from '@/infrastructure/gpu/masks';
 import {
@@ -63,7 +63,7 @@ import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 // Item renderer
 import {
   type PreviewPathVerticesOverride,
-  resolveFrameCompositionScene,
+  resolveFrameCompositionSceneCached,
   resolveCompositionRenderPlan,
   collectFrameVideoCandidates,
   resolveFrameRenderScene,
@@ -209,6 +209,7 @@ export async function createCompositionRenderer(
   // === GPU Compositor (for pixel-perfect blend modes) ===
   // Lazily created from the effects pipeline's GPU device
   let gpuCompositor: CompositorPipeline | null = null;
+  let gpuTexturePool: GpuTexturePool | null = null;
   let gpuMaskManager: MaskTextureManager | null = null;
   let gpuCompositeCanvas: OffscreenCanvas | null = null;
   let gpuCompositeCtx: GPUCanvasContext | null = null;
@@ -221,6 +222,7 @@ export async function createCompositionRenderer(
     if (!gpuPipeline) return false;
     const device = gpuPipeline.getDevice();
     gpuCompositor = new CompositorPipeline(device);
+    gpuTexturePool = new GpuTexturePool(device);
     gpuMaskManager = new MaskTextureManager(device);
     return true;
   }
@@ -1075,7 +1077,7 @@ export async function createCompositionRenderer(
         renderMode === 'preview' ? getPreviewPathVerticesOverride : undefined,
       );
 
-      const frameScene = resolveFrameCompositionScene({
+      const frameScene = resolveFrameCompositionSceneCached({
         renderPlan,
         frame,
         canvas: canvasSettings,
@@ -1438,12 +1440,8 @@ export async function createCompositionRenderer(
 
             const blendMode = task.type === 'item' ? (task.item.blendMode ?? 'normal') : 'normal';
 
-            // Upload item canvas to GPU texture
-            const tex = device.createTexture({
-              size: [w, h],
-              format: 'rgba8unorm',
-              usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
-            });
+            // Upload item canvas to GPU texture (pooled — no per-frame alloc)
+            const tex = gpuTexturePool!.acquire(w, h);
             device.queue.copyExternalImageToTexture(
               { source: result.source, flipY: false },
               { texture: tex },
@@ -1485,8 +1483,8 @@ export async function createCompositionRenderer(
             for (const c of result.poolCanvases) canvasPool.release(c);
           }
 
-          // Destroy per-frame textures
-          for (const tex of layerTextures) tex.destroy();
+          // Release pooled textures (no GPU destroy — recycled next frame)
+          for (const tex of layerTextures) gpuTexturePool!.release(tex);
         } else {
           // Canvas2D compositing fallback
           for (let i = 0; i < results.length; i++) {
@@ -1736,6 +1734,8 @@ export async function createCompositionRenderer(
 
       gpuCompositor?.destroy();
       gpuCompositor = null;
+      gpuTexturePool?.destroy();
+      gpuTexturePool = null;
       gpuMaskManager?.destroy();
       gpuMaskManager = null;
       gpuCompositeCtx = null;

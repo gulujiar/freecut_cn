@@ -1,9 +1,12 @@
 /**
- * Main-thread manager for the decoder prewarm Web Worker.
+ * Main-thread manager for the decoder prewarm Web Worker pool.
  *
- * Sends pre-seek requests to a background worker that runs mediabunny WASM
- * decode off the main thread. The worker returns decoded ImageBitmaps that
+ * Sends pre-seek requests to background workers that run mediabunny WASM
+ * decode off the main thread. Workers return decoded ImageBitmaps that
  * the render loop can draw directly — zero main-thread WASM work.
+ *
+ * Pool size: 3 workers allows parallel decode of transition pairs
+ * (both clips simultaneously) plus a spare for background preseek.
  *
  * This eliminates the 300-500ms keyframe seek stall when occluded variable-
  * speed clips become visible mid-playback.
@@ -14,6 +17,7 @@ import { createLogger } from '@/shared/logging/logger';
 const log = createLogger('DecoderPrewarm');
 const MAX_CACHED_BITMAPS_PER_SOURCE = 6;
 const PRESEEK_REQUEST_REUSE_TOLERANCE_SECONDS = 1 / 240;
+const WORKER_POOL_SIZE = 3;
 
 export interface DecoderPrewarmMetricsSnapshot {
   requests: number;
@@ -28,9 +32,16 @@ export interface DecoderPrewarmMetricsSnapshot {
   waitTimeouts: number;
   cacheSources: number;
   cacheBitmaps: number;
+  poolSize: number;
 }
 
-let worker: Worker | null = null;
+interface PoolWorker {
+  worker: Worker;
+  inflightCount: number;
+}
+
+let workerPool: PoolWorker[] = [];
+let poolInitialized = false;
 let requestId = 0;
 const pendingRequests = new Map<string, {
   resolve: (bitmap: ImageBitmap | null) => void;
@@ -58,6 +69,7 @@ const decoderPrewarmMetrics: DecoderPrewarmMetricsSnapshot = {
   waitTimeouts: 0,
   cacheSources: 0,
   cacheBitmaps: 0,
+  poolSize: 0,
 };
 
 /** In-flight preseek promises keyed by source URL — lets the render engine await
@@ -69,37 +81,67 @@ if (import.meta.env.DEV) {
   (window as unknown as Record<string, unknown>).__PREWARM_CACHE__ = bitmapCache;
 }
 
-function ensureWorker(): Worker | null {
-  if (worker) return worker;
+function handleWorkerMessage(event: MessageEvent): void {
+  const msg = event.data;
+  // eslint-disable-next-line no-console
+  console.log('[DecoderPrewarm]', msg.type, msg.step || '', msg.success, msg.error || '', msg.src || '', !!msg.bitmap);
+  if (msg.type === 'preseek_done') {
+    const pending = pendingRequests.get(msg.id);
+    if (pending) {
+      pendingRequests.delete(msg.id);
+      pending.resolve(msg.bitmap ?? null);
+    }
+  }
+}
+
+function createPoolWorker(): PoolWorker | null {
   try {
-    log.info('Creating decoder prewarm worker');
-    worker = new Worker(
+    const w = new Worker(
       new URL('../workers/decoder-prewarm-worker.ts', import.meta.url),
       { type: 'module' },
     );
-    worker.onmessage = (event: MessageEvent) => {
-      const msg = event.data;
-      // eslint-disable-next-line no-console
-      console.log('[DecoderPrewarm]', msg.type, msg.step || '', msg.success, msg.error || '', msg.src || '', !!msg.bitmap);
-      if (msg.type === 'preseek_done') {
-        const pending = pendingRequests.get(msg.id);
-        if (pending) {
-          pendingRequests.delete(msg.id);
-          pending.resolve(msg.bitmap ?? null);
-        }
-      }
-    };
-    worker.onerror = (error) => {
+    w.onmessage = handleWorkerMessage;
+    w.onerror = (error) => {
       log.warn('Decoder prewarm worker error', { message: error.message, filename: error.filename, lineno: error.lineno });
     };
-    worker.addEventListener('messageerror', (e) => {
+    w.addEventListener('messageerror', (e) => {
       log.warn('Decoder prewarm worker message error', { data: e.data });
     });
-    return worker;
+    return { worker: w, inflightCount: 0 };
   } catch (error) {
     log.warn('Failed to create decoder prewarm worker', { error });
     return null;
   }
+}
+
+function ensureWorkerPool(): void {
+  if (poolInitialized) return;
+  poolInitialized = true;
+  log.info(`Creating decoder prewarm worker pool (size: ${WORKER_POOL_SIZE})`);
+  for (let i = 0; i < WORKER_POOL_SIZE; i++) {
+    const pw = createPoolWorker();
+    if (pw) workerPool.push(pw);
+  }
+  decoderPrewarmMetrics.poolSize = workerPool.length;
+}
+
+/** Acquire the least-busy worker from the pool. */
+function acquireWorker(): PoolWorker | null {
+  ensureWorkerPool();
+  if (workerPool.length === 0) return null;
+  let best = workerPool[0]!;
+  for (let i = 1; i < workerPool.length; i++) {
+    const pw = workerPool[i]!;
+    if (pw.inflightCount < best.inflightCount) {
+      best = pw;
+    }
+  }
+  best.inflightCount++;
+  return best;
+}
+
+function releaseWorker(pw: PoolWorker): void {
+  pw.inflightCount = Math.max(0, pw.inflightCount - 1);
 }
 
 function findClosestBitmapEntry(
@@ -184,8 +226,8 @@ function removeInflightPreseek(src: string, entry: InflightPreseek): void {
 const blobByUrl = new Map<string, Blob>();
 
 export function backgroundPreseek(src: string, timestamp: number): Promise<ImageBitmap | null> {
-  const w = ensureWorker();
-  if (!w) return Promise.resolve(null);
+  const pw = acquireWorker();
+  if (!pw) return Promise.resolve(null);
   decoderPrewarmMetrics.requests += 1;
 
   const cachedBitmap = getCachedPredecodedBitmap(
@@ -195,6 +237,7 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
   );
   if (cachedBitmap) {
     decoderPrewarmMetrics.cacheHits += 1;
+    releaseWorker(pw);
     return Promise.resolve(cachedBitmap);
   }
 
@@ -205,6 +248,7 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
   );
   if (inflightMatch) {
     decoderPrewarmMetrics.inflightReuses += 1;
+    releaseWorker(pw);
     return inflightMatch.promise;
   }
 
@@ -212,12 +256,14 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
   const promise = new Promise<ImageBitmap | null>((resolve) => {
     const timeout = setTimeout(() => {
       pendingRequests.delete(id);
+      releaseWorker(pw);
       resolve(null);
     }, 5000);
 
     pendingRequests.set(id, {
       resolve: (bitmap) => {
         clearTimeout(timeout);
+        releaseWorker(pw);
         if (bitmap) {
           decoderPrewarmMetrics.workerSuccesses += 1;
           cachePredecodedBitmap(src, timestamp, bitmap);
@@ -231,6 +277,7 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
     // Send the blob directly to avoid slow UrlSource fetch in the worker.
     // Blobs are transferred via structured clone — fast and avoids re-fetch.
     decoderPrewarmMetrics.workerPosts += 1;
+    const w = pw.worker;
     const cachedBlob = blobByUrl.get(src);
     if (cachedBlob) {
       w.postMessage({ type: 'preseek', id, src, timestamp, blob: cachedBlob });
@@ -341,13 +388,15 @@ export function clearPredecodedCache(src?: string): void {
 }
 
 /**
- * Dispose the worker and clean up.
+ * Dispose all workers in the pool and clean up.
  */
 export function disposePrewarmWorker(): void {
-  if (worker) {
-    worker.terminate();
-    worker = null;
+  for (const pw of workerPool) {
+    pw.worker.terminate();
   }
+  workerPool = [];
+  poolInitialized = false;
+  decoderPrewarmMetrics.poolSize = 0;
   for (const pending of pendingRequests.values()) {
     pending.resolve(null);
   }
