@@ -9,6 +9,7 @@ import { waveformCache } from '../services/waveform-cache';
 export type { TimelineState, TimelineActions } from '../types';
 export { useTimelineStore } from '../stores/timeline-store';
 export { useItemsStore } from '../stores/items-store';
+export { useKeyframesStore } from '../stores/keyframes-store';
 export { Timeline } from '../components/timeline';
 export { BentoLayoutDialog } from '../components/bento-layout-dialog';
 export { useTimelineShortcuts } from '../hooks/use-timeline-shortcuts';

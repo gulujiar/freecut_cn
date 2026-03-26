@@ -8,8 +8,14 @@
 
 import { useCallback, useMemo } from 'react';
 import { Diamond } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@/shared/ui/cn';
-import { useTimelineStore } from '@/features/keyframes/deps/timeline';
+import {
+  useItemsStore,
+  useKeyframesStore,
+  useTimelineStore,
+  useTransitionsStore,
+} from '@/features/keyframes/deps/timeline';
 import { useThrottledFrame } from '@/features/keyframes/deps/preview-contract';
 import type { AnimatableProperty } from '@/types/keyframe';
 import {
@@ -51,9 +57,9 @@ export function KeyframeToggle({
 
   // Get keyframes for the first item (for multi-select, we show state of first item)
   const firstItemId = itemIds[0];
-  const itemKeyframes = useTimelineStore(
+  const itemKeyframes = useKeyframesStore(
     useCallback(
-      (s) => (firstItemId ? s.keyframes.find((k) => k.itemId === firstItemId) : undefined),
+      (s) => (firstItemId ? s.keyframesByItemId[firstItemId] : undefined),
       [firstItemId]
     )
   );
@@ -63,15 +69,26 @@ export function KeyframeToggle({
   const removeKeyframe = useTimelineStore((s) => s.removeKeyframe);
 
   // Get the first item to calculate relative frame
-  const firstItem = useTimelineStore(
+  const firstItem = useItemsStore(
     useCallback(
-      (s) => (firstItemId ? s.items.find((i) => i.id === firstItemId) : undefined),
+      (s) => (firstItemId ? s.itemById[firstItemId] : undefined),
       [firstItemId]
     )
   );
 
   // Get transitions to check for blocked regions
-  const transitions = useTimelineStore((s) => s.transitions);
+  const transitions = useTransitionsStore(
+    useShallow(
+      useCallback(
+        (s) => firstItemId
+          ? s.transitions.filter(
+            (transition) => transition.leftClipId === firstItemId || transition.rightClipId === firstItemId
+          )
+          : [],
+        [firstItemId]
+      )
+    )
+  );
 
   // Calculate frame relative to item start
   const relativeFrame = useMemo(() => {
@@ -183,4 +200,3 @@ export function KeyframeToggle({
     </Tooltip>
   );
 }
-

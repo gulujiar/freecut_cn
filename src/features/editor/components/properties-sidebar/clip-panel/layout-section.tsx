@@ -1,12 +1,13 @@
 import { useCallback, useMemo, memo } from 'react';
 import { Move, RotateCcw, Link2, Link2Off } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem } from '@/types/timeline';
 import type { TransformProperties, CanvasSettings } from '@/types/transform';
 import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library';
-import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { useKeyframesStore, useTimelineStore } from '@/features/editor/deps/timeline-store';
 import {
   resolveTransform,
   getSourceDimensions,
@@ -57,12 +58,27 @@ export const LayoutSection = memo(function LayoutSection({
   onAspectLockToggle,
 }: LayoutSectionProps) {
   const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+  const itemIdSet = useMemo(() => new Set(itemIds), [itemIds]);
+  const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
 
   // Get current playhead frame for keyframe animation (throttled to reduce re-renders)
   const currentFrame = useThrottledFrame();
 
-  // Get keyframes for all selected items
-  const allKeyframes = useTimelineStore((s) => s.keyframes);
+  const itemKeyframes = useKeyframesStore(
+    useShallow(
+      useCallback(
+        (s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null),
+        [itemIds]
+      )
+    )
+  );
+  const keyframesByItemId = useMemo(() => {
+    const map = new Map<string, (typeof itemKeyframes)[number]>();
+    for (const [index, itemId] of itemIds.entries()) {
+      map.set(itemId, itemKeyframes[index] ?? null);
+    }
+    return map;
+  }, [itemIds, itemKeyframes]);
 
   // Gizmo store for live preview (both for properties panel and gizmo drag sync)
   const setTransformPreview = useGizmoStore((s) => s.setTransformPreview);
@@ -74,12 +90,12 @@ export const LayoutSection = memo(function LayoutSection({
   const gizmoPreview = useMemo(() => {
     if (!activeGizmo || !previewTransform) return null;
     // Check if the gizmo's active item is in our selection
-    if (!itemIds.includes(activeGizmo.itemId)) return null;
+    if (!itemIdSet.has(activeGizmo.itemId)) return null;
     return {
       itemId: activeGizmo.itemId,
       transform: previewTransform,
     };
-  }, [activeGizmo, previewTransform, itemIds]);
+  }, [activeGizmo, previewTransform, itemIdSet]);
 
   // Resolve transforms once for all items, applying keyframe animation and
   // gizmo preview overrides. Reused by mixed-value fields and align/distribute.
@@ -92,7 +108,7 @@ export const LayoutSection = memo(function LayoutSection({
         }
         const sourceDimensions = getSourceDimensions(item);
         const baseResolved = resolveTransform(item, canvas, sourceDimensions);
-        const itemKeyframes = allKeyframes.find((k) => k.itemId === item.id);
+        const itemKeyframes = keyframesByItemId.get(item.id) ?? undefined;
         if (!itemKeyframes) return baseResolved;
         const relativeFrame = currentFrame - item.from;
         return resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame);
@@ -107,7 +123,7 @@ export const LayoutSection = memo(function LayoutSection({
       });
     }
     return resolved;
-  }, [items, canvas, gizmoPreview, allKeyframes, currentFrame]);
+  }, [items, canvas, gizmoPreview, keyframesByItemId, currentFrame]);
 
   // Memoize all transform values at once to avoid repeated iterations.
   const { x, y, width, height, rotation } = useMemo(() => {
@@ -155,13 +171,13 @@ export const LayoutSection = memo(function LayoutSection({
       property: 'x' | 'y' | 'width' | 'height' | 'rotation' | 'opacity',
       value: number
     ): AutoKeyframeOperation | null => {
-      const item = items.find((i) => i.id === itemId);
+      const item = itemsById.get(itemId);
       if (!item) return null;
 
-      const itemKeyframes = allKeyframes.find((k) => k.itemId === itemId);
+      const itemKeyframes = keyframesByItemId.get(itemId) ?? undefined;
       return getAutoKeyframeOp(item, itemKeyframes, property, value, currentFrame);
     },
-    [items, allKeyframes, currentFrame]
+    [currentFrame, itemsById, keyframesByItemId]
   );
 
   // Live preview for X position (during scrub)
