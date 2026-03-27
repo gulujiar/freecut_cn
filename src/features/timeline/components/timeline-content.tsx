@@ -1056,7 +1056,7 @@ export const TimelineContent = memo(function TimelineContent({
     >
       <MarqueeOverlay marqueeState={marqueeState} />
 
-      <div className="z-30 shrink-0 timeline-ruler bg-background" style={{ width: `${timelineWidth}px` }}>
+      <div className="relative z-30 shrink-0 timeline-ruler bg-background" style={{ width: `${timelineWidth}px` }}>
         <TimelineMarkers duration={actualDuration} width={timelineWidth} />
         <TimelinePreviewScrubber inRuler maxFrame={maxTimelineFrame} />
         <TimelinePlayhead inRuler maxFrame={maxTimelineFrame} />
