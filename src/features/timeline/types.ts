@@ -55,6 +55,7 @@ export interface TimelineActions {
   splitItem: (id: string, splitFrame: number) => void;
   joinItems: (itemIds: string[]) => void;
   rateStretchItem: (id: string, newFrom: number, newDuration: number, newSpeed: number) => void;
+  resetSpeedWithRipple: (itemIds: string[]) => void;
   setInPoint: (frame: number) => void;
   setOutPoint: (frame: number) => void;
   clearInOutPoints: () => void;

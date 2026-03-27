@@ -37,6 +37,7 @@ interface AppSettings {
   // Performance
   maxUndoHistory: number;
   autoSaveInterval: number; // minutes (0 = disabled)
+  dualDecoderTransitions: boolean; // allocate extra decoder lane for variable-speed transition clips
 
   // Whisper defaults
   defaultWhisperModel: MediaTranscriptModel;
@@ -90,6 +91,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   // Performance
   maxUndoHistory: 50,
   autoSaveInterval: 0, // Auto-save disabled by default
+  dualDecoderTransitions: false,
 
   // Whisper defaults
   defaultWhisperModel: DEFAULT_WHISPER_MODEL,

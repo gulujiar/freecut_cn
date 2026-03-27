@@ -978,6 +978,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       splitItem: timelineActions.splitItem,
       joinItems: timelineActions.joinItems,
       rateStretchItem: timelineActions.rateStretchItem,
+      resetSpeedWithRipple: timelineActions.resetSpeedWithRipple,
       setInPoint: timelineActions.setInPoint,
       setOutPoint: timelineActions.setOutPoint,
       clearInOutPoints: timelineActions.clearInOutPoints,

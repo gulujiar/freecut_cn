@@ -196,6 +196,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
   const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval);
   const maxUndoHistory = useSettingsStore((s) => s.maxUndoHistory);
+  const dualDecoderTransitions = useSettingsStore((s) => s.dualDecoderTransitions);
   const defaultWhisperModel = useSettingsStore((s) => s.defaultWhisperModel);
   const defaultWhisperQuantization = useSettingsStore((s) => s.defaultWhisperQuantization);
   const defaultWhisperLanguage = useSettingsStore((s) => s.defaultWhisperLanguage);
@@ -356,6 +357,16 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     />
                     <span className="text-xs text-muted-foreground w-6">{maxUndoHistory}</span>
                   </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm">Dual decoder transitions</Label>
+                    <p className="text-xs text-muted-foreground">Extra decoder lane for variable-speed clips in transitions. Uses more memory.</p>
+                  </div>
+                  <Switch
+                    checked={dualDecoderTransitions}
+                    onCheckedChange={(v) => setSetting('dualDecoderTransitions', v)}
+                  />
                 </div>
               </div>
             </section>

@@ -18,7 +18,7 @@ import {
 import { toast } from 'sonner';
 import { execute, applyTransitionRepairs, getLogger } from './shared';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
-import { timelineToSourceFrames } from '../../utils/source-calculations';
+import { timelineToSourceFrames, sourceToTimelineFrames } from '../../utils/source-calculations';
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 import { clampSlideDeltaToPreserveTransitions } from '../../utils/transition-utils';
@@ -872,6 +872,150 @@ export function rateStretchItem(
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, newFrom, newDuration, newSpeed });
+}
+
+/**
+ * Reset speed to 1x for the given items and push subsequent clips right to
+ * avoid overlaps. Everything happens in a single undo entry.
+ *
+ * When a variable-speed clip (e.g. 1.23x) is reset to 1x, it gets longer.
+ * Without ripple, it would overlap the next clip on the same track. This
+ * function shifts all downstream clips (and their linked companions) right
+ * by the growth amount.
+ */
+export function resetSpeedWithRipple(itemIds: string[]): void {
+  const TOLERANCE = 0.01;
+  execute('RESET_SPEED_WITH_RIPPLE', () => {
+    const itemsStore = useItemsStore.getState();
+    const fps = useTimelineSettingsStore.getState().fps;
+
+    // Collect all items that need resetting (deduplicate via synchronized links)
+    const processedIds = new Set<string>();
+    const stretchOps: Array<{
+      id: string;
+      trackId: string;
+      oldEnd: number;
+      newDuration: number;
+      synchronizedIds: string[];
+    }> = [];
+
+    for (const id of itemIds) {
+      if (processedIds.has(id)) continue;
+      const item = itemsStore.items.find((i) => i.id === id);
+      if (!item || (item.type !== 'video' && item.type !== 'audio')) continue;
+
+      const currentSpeed = item.speed || 1;
+      if (Math.abs(currentSpeed - 1) <= TOLERANCE) continue;
+
+      const synchronizedItems = getSynchronizedLinkedItemsForEdit(itemsStore.items, id);
+      for (const si of synchronizedItems) processedIds.add(si.id);
+
+      const sourceFps = item.sourceFps ?? fps;
+      const effectiveSourceFrames =
+        item.sourceEnd !== undefined && item.sourceStart !== undefined
+          ? item.sourceEnd - item.sourceStart
+          : timelineToSourceFrames(item.durationInFrames, currentSpeed, fps, sourceFps);
+
+      const newDuration = Math.max(1, sourceToTimelineFrames(effectiveSourceFrames, 1, sourceFps, fps));
+      const oldEnd = item.from + item.durationInFrames;
+
+      stretchOps.push({
+        id,
+        trackId: item.trackId,
+        oldEnd,
+        newDuration,
+        synchronizedIds: synchronizedItems.map((si) => si.id),
+      });
+    }
+
+    if (stretchOps.length === 0) return;
+
+    // Phase 1: Apply all rate stretches
+    for (const op of stretchOps) {
+      const anchor = itemsStore.items.find((i) => i.id === op.id);
+      if (!anchor) continue;
+
+      const oldDuration = anchor.durationInFrames;
+      itemsStore._rateStretchItem(op.id, anchor.from, op.newDuration, 1);
+
+      // Synchronize linked items
+      const anchorAfter = useItemsStore.getState().itemById[op.id];
+      if (!anchorAfter) continue;
+
+      const actualDuration = anchorAfter.durationInFrames;
+      const fromDelta = anchorAfter.from - anchor.from;
+
+      for (const siId of op.synchronizedIds) {
+        if (siId === op.id) continue;
+        const si = useItemsStore.getState().items.find((i) => i.id === siId);
+        if (!si) continue;
+        itemsStore._rateStretchItem(siId, si.from + fromDelta, actualDuration, anchorAfter.speed ?? 1);
+      }
+
+      // Scale keyframes
+      if (oldDuration !== actualDuration) {
+        for (const siId of op.synchronizedIds) {
+          useKeyframesStore.getState()._scaleKeyframesForItem(siId, oldDuration, actualDuration);
+        }
+      }
+    }
+
+    // Phase 2: Push subsequent clips right to resolve overlaps
+    const freshItems = useItemsStore.getState().items;
+    const allChangedIds = new Set(stretchOps.flatMap((op) => op.synchronizedIds));
+    const moveUpdates: Array<{ id: string; from: number }> = [];
+    const movedIds = new Set<string>();
+
+    for (const op of stretchOps) {
+      const stretchedItem = freshItems.find((i) => i.id === op.id);
+      if (!stretchedItem) continue;
+
+      const newEnd = stretchedItem.from + stretchedItem.durationInFrames;
+      const growth = newEnd - op.oldEnd;
+      if (growth <= 0) continue;
+
+      // Find all track IDs touched by this item + its linked companions
+      const touchedTrackIds = new Set<string>();
+      for (const siId of op.synchronizedIds) {
+        const si = freshItems.find((i) => i.id === siId);
+        if (si) touchedTrackIds.add(si.trackId);
+      }
+
+      // On each touched track, push subsequent clips right
+      for (const trackId of touchedTrackIds) {
+        const trackItems = freshItems
+          .filter((i) => i.trackId === trackId && !allChangedIds.has(i.id) && i.from >= op.oldEnd)
+          .sort((a, b) => a.from - b.from);
+
+        for (const downstream of trackItems) {
+          if (movedIds.has(downstream.id)) continue;
+          movedIds.add(downstream.id);
+          moveUpdates.push({ id: downstream.id, from: downstream.from + growth });
+
+          // Also move linked companions on other tracks
+          const linkedIds = getLinkedItemIds(freshItems, downstream.id);
+          for (const linkedId of linkedIds) {
+            if (linkedId === downstream.id || movedIds.has(linkedId)) continue;
+            const linked = freshItems.find((i) => i.id === linkedId);
+            if (linked) {
+              movedIds.add(linkedId);
+              moveUpdates.push({ id: linkedId, from: linked.from + growth });
+            }
+          }
+        }
+      }
+    }
+
+    if (moveUpdates.length > 0) {
+      useItemsStore.getState()._moveItems(moveUpdates);
+    }
+
+    // Phase 3: Repair transitions for all affected clips
+    const allAffectedIds = [...allChangedIds, ...movedIds];
+    applyTransitionRepairs(allAffectedIds);
+
+    useTimelineSettingsStore.getState().markDirty();
+  }, { itemIds });
 }
 
 /**

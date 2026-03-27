@@ -75,7 +75,7 @@ import {
 import { shouldPreferPlayerForStyledTextScrub as shouldPreferPlayerForStyledTextScrubGuard } from '../utils/text-render-guard';
 import { useGpuEffectsOverlay } from '../hooks/use-gpu-effects-overlay';
 import { useCustomPlayer } from '../hooks/use-custom-player';
-import { getBestDomVideoElementForItem } from '@/features/preview/deps/composition-runtime';
+import { getBestDomVideoElementForItem, transitionSafePlay } from '@/features/preview/deps/composition-runtime';
 import { createLogger, createOperationId, type WideEvent } from '@/shared/logging/logger';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 
@@ -256,6 +256,7 @@ export const VideoPreview = memo(function VideoPreview({
   const transitionExitElementsRef = useRef<Map<string, HTMLVideoElement | null>>(new Map());
   const transitionSessionStallCountRef = useRef<Map<string, { ct: number; count: number }>>(new Map());
   const transitionSessionBufferedFramesRef = useRef<Map<number, OffscreenCanvas>>(new Map());
+  const transitionPrewarmPromiseRef = useRef<Promise<void> | null>(null);
   const captureCanvasSourceInFlightRef = useRef<Promise<OffscreenCanvas | HTMLCanvasElement | null> | null>(null);
   const captureInFlightRef = useRef<Promise<string | null> | null>(null);
   const captureImageDataInFlightRef = useRef<Promise<ImageData | null> | null>(null);
@@ -1844,6 +1845,10 @@ export const VideoPreview = memo(function VideoPreview({
 
     transitionSessionWindowRef.current = null;
     // Remove transition-hold marks so video-content resumes normal premount behavior.
+    // Audio gain stays at 0 here — the React volume effect in NativePreviewVideo
+    // restores the correct gain when _sharedTransitionSync flips back to false.
+    // Eagerly unmuting to 1.0 here would cause a brief volume spike between
+    // back-to-back transitions (e.g. B→A→A) before React corrects it.
     for (const el of transitionSessionPinnedElementsRef.current.values()) {
       if (el) delete el.dataset.transitionHold;
     }
@@ -1855,6 +1860,7 @@ export const VideoPreview = memo(function VideoPreview({
     transitionSessionPinnedElementsRef.current.clear();
     transitionSessionStallCountRef.current.clear();
     transitionSessionBufferedFramesRef.current.clear();
+    transitionPrewarmPromiseRef.current = null;
   }, [fps, pushTransitionTrace]);
 
   const pinTransitionPlaybackSession = useCallback((window: ResolvedTransitionWindow<TimelineItem> | null) => {
@@ -1930,23 +1936,17 @@ export const VideoPreview = memo(function VideoPreview({
       if (el && isPlaying) {
         el.dataset.transitionHold = '1';
         const clipSpeed = clip.speed ?? 1;
-        if (Math.abs(el.playbackRate - clipSpeed) > 0.01) {
-          el.playbackRate = clipSpeed;
-        }
-        if (el.paused) {
-          if (el.readyState >= 2) {
-            el.play().catch(() => {});
-          } else {
-            // Element not ready yet — listen for enough data to play.
-            const onCanPlay = () => {
-              el.removeEventListener('canplay', onCanPlay);
-              if (el.dataset.transitionHold === '1' && el.paused) {
-                el.playbackRate = clipSpeed;
-                el.play().catch(() => {});
-              }
-            };
-            el.addEventListener('canplay', onCanPlay, { once: true });
-          }
+        if (el.readyState >= 2) {
+          transitionSafePlay(el, clipSpeed);
+        } else {
+          // Element not ready yet — listen for enough data to play.
+          const onCanPlay = () => {
+            el.removeEventListener('canplay', onCanPlay);
+            if (el.dataset.transitionHold === '1' && el.paused) {
+              transitionSafePlay(el, clipSpeed);
+            }
+          };
+          el.addEventListener('canplay', onCanPlay, { once: true });
         }
       }
     }
@@ -2000,12 +2000,7 @@ export const VideoPreview = memo(function VideoPreview({
     const ensurePlaying = (el: HTMLVideoElement) => {
       if (isPlaying) {
         el.dataset.transitionHold = '1';
-        if (Math.abs(el.playbackRate - clipSpeed) > 0.01) {
-          el.playbackRate = clipSpeed;
-        }
-        if (el.paused) {
-          el.play().catch(() => {});
-        }
+        transitionSafePlay(el, clipSpeed);
       }
     };
 
@@ -2982,12 +2977,19 @@ export const VideoPreview = memo(function VideoPreview({
                 const prevSession = transitionSessionWindowRef.current;
                 const isNewSession = !prevSession || prevSession.transition.id !== windowForFrame.transition.id;
                 pinTransitionPlaybackSession(windowForFrame);
-                // Pre-warm mediabunny decoders when entering a transition mid-playback
-                // (e.g. starting playback inside a transition zone). Pre-seek to
-                // the current frame (not startFrame) so the decoder cursor lands
-                // close to where the first real render will need it.
+                // Await the prearm prewarm so mediabunny decoders are positioned
+                // at the correct source time before rendering. The prearm fires
+                // ~2s ahead so this resolves near-instantly in the common case.
+                // Without this, decoders may be at a stale position from a prior
+                // playback, causing 100-300ms backward keyframe seeks per frame.
+                if (transitionPrewarmPromiseRef.current) {
+                  await transitionPrewarmPromiseRef.current;
+                  transitionPrewarmPromiseRef.current = null;
+                }
+                // When entering a transition mid-playback (no prearm happened),
+                // await the prewarm synchronously to position decoders.
                 if (isNewSession && 'prewarmItems' in renderer) {
-                  void renderer.prewarmItems(
+                  await renderer.prewarmItems(
                     [windowForFrame.leftClip.id, windowForFrame.rightClip.id],
                     frameToRender,
                   );
@@ -3454,7 +3456,7 @@ export const VideoPreview = memo(function VideoPreview({
             if (transitionWindow) {
               const renderer = scrubRendererRef.current;
               if (renderer && 'prewarmItems' in renderer) {
-                void renderer.prewarmItems(
+                transitionPrewarmPromiseRef.current = renderer.prewarmItems(
                   [transitionWindow.leftClip.id, transitionWindow.rightClip.id],
                   transitionWindow.startFrame,
                 );

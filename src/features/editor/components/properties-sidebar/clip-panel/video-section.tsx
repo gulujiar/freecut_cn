@@ -134,28 +134,11 @@ export function VideoSection({ items }: VideoSectionProps) {
     [itemIds, updateItem, clearPreview]
   );
 
-  // Reset speed to 1x
-  // Read current values from store to avoid depending on videoItems (prevents callback recreation)
+  // Reset speed to 1x — pushes subsequent clips right to avoid overlaps
+  const resetSpeedWithRipple = useTimelineStore((s: TimelineState & TimelineActions) => s.resetSpeedWithRipple);
   const handleResetSpeed = useCallback(() => {
-    const tolerance = 0.01;
-    const { items: currentItems, fps } = useTimelineStore.getState();
-    currentItems
-      .filter((item: TimelineItem): item is VideoItem | AudioItem =>
-        (item.type === 'video' || item.type === 'audio') && rateStretchableIds.includes(item.id))
-      .forEach((item: VideoItem | AudioItem) => {
-        const currentSpeed = item.speed || 1;
-        if (Math.abs(currentSpeed - 1) <= tolerance) return;
-
-        const sourceFps = item.sourceFps ?? fps;
-        const effectiveSourceFrames =
-          item.sourceEnd !== undefined && item.sourceStart !== undefined
-            ? item.sourceEnd - item.sourceStart
-            : timelineToSourceFrames(item.durationInFrames, currentSpeed, fps, sourceFps);
-        // At 1x speed, timeline frames = source frames converted to timeline FPS
-        const newDuration = Math.max(1, sourceToTimelineFrames(effectiveSourceFrames, 1, sourceFps, fps));
-        rateStretchItem(item.id, item.from, newDuration, 1);
-      });
-  }, [rateStretchableIds, rateStretchItem]);
+    resetSpeedWithRipple(rateStretchableIds);
+  }, [rateStretchableIds, resetSpeedWithRipple]);
 
   // Reset fade in to 0
   const handleResetFadeIn = useCallback(() => {
