@@ -11,8 +11,8 @@ describe('audio-fade-curve', () => {
     expect(clampAudioFadeCurve(-2)).toBe(-1);
     expect(clampAudioFadeCurve(2)).toBe(1);
     expect(clampAudioFadeCurve(0.126)).toBe(0.13);
-    expect(clampAudioFadeCurveX(-1)).toBe(0.15);
-    expect(clampAudioFadeCurveX(2)).toBe(0.85);
+    expect(clampAudioFadeCurveX(-1)).toBe(0.04);
+    expect(clampAudioFadeCurveX(2)).toBe(0.96);
   });
 
   it('evaluates fade in curves around a linear midpoint', () => {
@@ -27,5 +27,10 @@ describe('audio-fade-curve', () => {
     expect(evaluateAudioFadeOutCurve(0.5, 0.5, 0.5)).toBeGreaterThan(0.5);
     expect(evaluateAudioFadeOutCurve(0.5, -0.5, 0.5)).toBeLessThan(0.5);
     expect(evaluateAudioFadeOutCurve(0.5, 0, 0.25)).toBeCloseTo(0.5, 1);
+  });
+
+  it('supports very sharp fades when the control point is near the corners', () => {
+    expect(evaluateAudioFadeInCurve(0.25, 1, 0)).toBeGreaterThan(0.7);
+    expect(evaluateAudioFadeOutCurve(0.75, -1, 1)).toBeLessThan(0.3);
   });
 });

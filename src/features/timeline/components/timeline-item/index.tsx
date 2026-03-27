@@ -115,7 +115,7 @@ import { WHISPER_MODEL_LABELS } from '@/shared/utils/whisper-settings';
 import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
 import { getTranscriptionOverallPercent } from '@/shared/utils/transcription-progress';
 import { getAudioFadePixels, getAudioFadeSecondsFromOffset, type AudioFadeHandle } from '../../utils/audio-fade';
-import { getAudioFadeCurveControlPoint, getAudioFadeCurveFromOffset } from '../../utils/audio-fade-curve';
+import { getAudioFadeCurveControlPoint, getAudioFadeCurveFromOffset, getAudioFadeCurvePath } from '../../utils/audio-fade-curve';
 import { getAudioVolumeDbFromDragDelta, getAudioVisualizationScale, getAudioVolumeLineY } from '../../utils/audio-volume';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { findHandleNeighborWithTransitions } from '../../utils/transition-linked-neighbors';
@@ -139,7 +139,6 @@ const AUDIO_VOLUME_EPSILON = 0.05;
 const AUDIO_ENVELOPE_VIEWBOX_HEIGHT = 100;
 const AUDIO_VOLUME_DRAG_ACTIVATION_DELAY_MS = 120;
 const AUDIO_VOLUME_DRAG_ACTIVATION_DISTANCE_PX = 4;
-
 function readDraggedTransitionDescriptor(event: React.DragEvent): DraggedTransitionDescriptor | null {
   const cached = useTransitionDragStore.getState().draggedTransition;
   if (cached) return cached;
@@ -1713,6 +1712,26 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }),
     [audioFadeOutPixels, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX, visualWidth]
   );
+  const audioFadeInCurvePath = useMemo(
+    () => getAudioFadeCurvePath({
+      handle: 'in',
+      fadePixels: audioFadeInPixels,
+      clipWidthPixels: visualWidth,
+      curve: displayedAudioFadeInCurve,
+      curveX: displayedAudioFadeInCurveX,
+    }),
+    [audioFadeInPixels, displayedAudioFadeInCurve, displayedAudioFadeInCurveX, visualWidth]
+  );
+  const audioFadeOutCurvePath = useMemo(
+    () => getAudioFadeCurvePath({
+      handle: 'out',
+      fadePixels: audioFadeOutPixels,
+      clipWidthPixels: visualWidth,
+      curve: displayedAudioFadeOutCurve,
+      curveX: displayedAudioFadeOutCurveX,
+    }),
+    [audioFadeOutPixels, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX, visualWidth]
+  );
   const audioControlsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!audioFadeEdit?.isCommitting || item.type !== 'audio') {
@@ -2635,13 +2654,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 >
                   {audioFadeInPixels > 0 && (
                     <path
-                      d={`M 0 0 L ${audioFadeInPixels} 0 Q ${audioFadeInCurvePoint.x} ${audioFadeInCurvePoint.y} 0 100 Z`}
+                      d={audioFadeInCurvePath}
                       fill="rgba(0,0,0,0.5)"
                     />
                   )}
                   {audioFadeOutPixels > 0 && (
                     <path
-                      d={`M ${Math.max(0, visualWidth - audioFadeOutPixels)} 0 Q ${audioFadeOutCurvePoint.x} ${audioFadeOutCurvePoint.y} ${visualWidth} 100 L ${visualWidth} 0 Z`}
+                      d={audioFadeOutCurvePath}
                       fill="rgba(0,0,0,0.5)"
                     />
                   )}

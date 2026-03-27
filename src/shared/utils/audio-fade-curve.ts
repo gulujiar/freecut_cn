@@ -1,8 +1,11 @@
 export const AUDIO_FADE_CURVE_MIN = -1;
 export const AUDIO_FADE_CURVE_MAX = 1;
-export const AUDIO_FADE_CURVE_X_MIN = 0.15;
-export const AUDIO_FADE_CURVE_X_MAX = 0.85;
+export const AUDIO_FADE_CURVE_X_MIN = 0.04;
+export const AUDIO_FADE_CURVE_X_MAX = 0.96;
 export const AUDIO_FADE_CURVE_X_DEFAULT = 0.52;
+
+const AUDIO_FADE_CURVE_SOLVE_EPSILON = 0.0001;
+const AUDIO_FADE_CURVE_MAX_EXPONENT = 12;
 
 export interface AudioClipFadeSpan {
   startFrame: number;
@@ -47,38 +50,63 @@ function getFadeOutControlY(curve: number | undefined, curveX: number | undefine
     : linearY + normalizedCurve * downwardRange;
 }
 
-function solveQuadraticBezierTime(progress: number, controlX: number): number {
-  const x = Math.max(0, Math.min(1, progress));
-  const cx = clampAudioFadeCurveX(controlX);
-  const a = 1 - (2 * cx);
-  const b = 2 * cx;
-  const c = -x;
-
-  if (Math.abs(a) < 0.000001) {
-    return b === 0 ? x : Math.max(0, Math.min(1, x / b));
-  }
-
-  const discriminant = Math.max(0, (b * b) - (4 * a * c));
-  const sqrt = Math.sqrt(discriminant);
-  const t1 = (-b + sqrt) / (2 * a);
-  const t2 = (-b - sqrt) / (2 * a);
-  if (t1 >= 0 && t1 <= 1) return t1;
-  if (t2 >= 0 && t2 <= 1) return t2;
-  return Math.max(0, Math.min(1, t1));
+function clampUnit(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
-function evaluateQuadraticBezierY(progress: number, controlX: number, controlY: number, startY: number, endY: number): number {
-  const t = solveQuadraticBezierTime(progress, controlX);
-  const oneMinusT = 1 - t;
-  return (oneMinusT * oneMinusT * startY) + (2 * oneMinusT * t * controlY) + (t * t * endY);
+function clampUnitForSolve(value: number): number {
+  return Math.max(AUDIO_FADE_CURVE_SOLVE_EPSILON, Math.min(1 - AUDIO_FADE_CURVE_SOLVE_EPSILON, value));
+}
+
+function solvePowerExponent(base: number, target: number): number {
+  const exponent = Math.log(clampUnitForSolve(target)) / Math.log(clampUnitForSolve(base));
+
+  if (!Number.isFinite(exponent)) {
+    return AUDIO_FADE_CURVE_MAX_EXPONENT;
+  }
+
+  return Math.max(1, Math.min(AUDIO_FADE_CURVE_MAX_EXPONENT, exponent));
+}
+
+function evaluatePowerCurve(progress: number, exponent: number): number {
+  return Math.pow(clampUnit(progress), exponent);
 }
 
 export function evaluateAudioFadeInCurve(progress: number, curve: number | undefined, curveX?: number): number {
-  return evaluateQuadraticBezierY(progress, clampAudioFadeCurveX(curveX), getFadeInControlY(curve, curveX), 0, 1);
+  const normalizedProgress = clampUnit(progress);
+  const pointX = clampAudioFadeCurveX(curveX);
+  const pointY = getFadeInControlY(curve, curveX);
+
+  if (Math.abs(pointY - pointX) <= AUDIO_FADE_CURVE_SOLVE_EPSILON) {
+    return normalizedProgress;
+  }
+
+  if (pointY > pointX) {
+    const exponent = solvePowerExponent(1 - pointX, 1 - pointY);
+    return 1 - evaluatePowerCurve(1 - normalizedProgress, exponent);
+  }
+
+  const exponent = solvePowerExponent(pointX, pointY);
+  return evaluatePowerCurve(normalizedProgress, exponent);
 }
 
 export function evaluateAudioFadeOutCurve(progress: number, curve: number | undefined, curveX?: number): number {
-  return evaluateQuadraticBezierY(progress, clampAudioFadeCurveX(curveX), getFadeOutControlY(curve, curveX), 1, 0);
+  const normalizedProgress = clampUnit(progress);
+  const pointX = clampAudioFadeCurveX(curveX);
+  const pointY = getFadeOutControlY(curve, curveX);
+  const linearY = 1 - pointX;
+
+  if (Math.abs(pointY - linearY) <= AUDIO_FADE_CURVE_SOLVE_EPSILON) {
+    return 1 - normalizedProgress;
+  }
+
+  if (pointY > linearY) {
+    const exponent = solvePowerExponent(pointX, 1 - pointY);
+    return 1 - evaluatePowerCurve(normalizedProgress, exponent);
+  }
+
+  const exponent = solvePowerExponent(1 - pointX, pointY);
+  return evaluatePowerCurve(1 - normalizedProgress, exponent);
 }
 
 interface AudioFadeMultiplierOptions {

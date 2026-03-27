@@ -73,13 +73,13 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
     const isActive = curveEditingHandle === handle || hoveredHandle === handle;
 
     return cn(
-      'absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-orange-200/90 shadow-[0_0_0_1px_rgba(15,23,42,0.2)] transition-opacity pointer-events-auto cursor-ns-resize touch-none before:absolute before:-inset-[8px] before:content-[""] focus-visible:outline-none',
+      'absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-orange-200/90 shadow-[0_0_0_1px_rgba(15,23,42,0.2)] transition-opacity pointer-events-auto cursor-move touch-none before:absolute before:-inset-[8px] before:content-[""] focus-visible:outline-none',
       isActive ? 'bg-orange-500 opacity-100' : 'bg-orange-400/90 opacity-0 group-hover/timeline-item:opacity-100',
     );
   };
 
   return (
-    <div className="absolute inset-x-0 top-0 h-8 pointer-events-none z-40">
+    <div className="absolute inset-0 pointer-events-none z-40">
       <button
         type="button"
         className={getHandleClassName()}
