@@ -100,11 +100,7 @@ export const TimelineHeader = memo(function TimelineHeader({
   const setActiveTool = useSelectionStore((s) => s.setActiveTool);
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
-  const sourcePatchVideoEnabled = useEditorStore((s) => s.sourcePatchVideoEnabled);
-  const sourcePatchAudioEnabled = useEditorStore((s) => s.sourcePatchAudioEnabled);
   const linkedSelectionEnabled = useEditorStore((s) => s.linkedSelectionEnabled);
-  const toggleSourcePatchVideoEnabled = useEditorStore((s) => s.toggleSourcePatchVideoEnabled);
-  const toggleSourcePatchAudioEnabled = useEditorStore((s) => s.toggleSourcePatchAudioEnabled);
   const setLinkedSelectionEnabled = useEditorStore((s) => s.setLinkedSelectionEnabled);
   const canUndo = useTimelineCommandStore((s) => s.canUndo);
   const canRedo = useTimelineCommandStore((s) => s.canRedo);
@@ -522,35 +518,6 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Link2 className="w-3.5 h-3.5" />
         </Button>
 
-        <Separator orientation="vertical" className="h-5 mx-1.5" />
-
-        <div className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-1.5 py-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`h-7 min-w-7 px-2 font-mono text-[11px] ${
-              sourcePatchVideoEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
-            }`}
-            onClick={toggleSourcePatchVideoEnabled}
-            aria-label={sourcePatchVideoEnabled ? 'Disable video source patch target' : 'Enable video source patch target'}
-            data-tooltip={sourcePatchVideoEnabled ? 'Video Source Patch On' : 'Video Source Patch Off'}
-          >
-            V
-          </Button>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`h-7 min-w-7 px-2 font-mono text-[11px] ${
-              sourcePatchAudioEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
-            }`}
-            onClick={toggleSourcePatchAudioEnabled}
-            aria-label={sourcePatchAudioEnabled ? 'Disable audio source patch target' : 'Enable audio source patch target'}
-            data-tooltip={sourcePatchAudioEnabled ? 'Audio Source Patch On' : 'Audio Source Patch Off'}
-          >
-            A
-          </Button>
-        </div>
       </div>
 
       {/* Right: Zoom Controls */}

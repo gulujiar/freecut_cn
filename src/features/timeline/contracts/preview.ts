@@ -24,3 +24,4 @@ export {
   performInsertEdit,
   performOverwriteEdit,
 } from '../stores/actions/source-edit-actions';
+export { resolveSourceEditTrackTargets } from '../utils/source-edit-targeting';

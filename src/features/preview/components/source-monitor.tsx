@@ -1,8 +1,12 @@
-import { useState, useEffect, useRef, useCallback, memo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { X, Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight, Repeat, ArrowLeftToLine, ArrowRightToLine, XCircle, ArrowDownToLine, Replace } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { performInsertEdit, performOverwriteEdit } from '@/features/preview/deps/timeline-source-edit';
+import {
+  performInsertEdit,
+  performOverwriteEdit,
+  resolveSourceEditTrackTargets,
+} from '@/features/preview/deps/timeline-source-edit';
 import {
   PlayerEmitterProvider,
   ClockBridgeProvider,
@@ -13,8 +17,11 @@ import {
 import { SourceComposition } from './source-composition';
 import { resolveMediaUrl } from '../utils/media-resolver';
 import { useMediaLibraryStore, getMediaType } from '@/features/preview/deps/media-library';
+import { useItemsStore } from '@/features/preview/deps/timeline-store';
 import { useSettingsStore } from '@/features/preview/deps/settings';
+import { useEditorStore } from '@/shared/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
+import { useSelectionStore } from '@/shared/state/selection';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
 
 interface SourceMonitorProps {
@@ -82,6 +89,7 @@ export const SourceMonitor = memo(function SourceMonitor({ mediaId, onClose }: S
             mediaId={mediaId}
             src={blobUrl}
             mediaType={mediaType}
+            hasAudio={mediaType === 'video' && !!media.audioCodec}
             fileName={media.fileName}
             mediaWidth={mediaWidth}
             mediaHeight={mediaHeight}
@@ -101,6 +109,7 @@ interface SourceMonitorInnerProps {
   mediaId: string;
   src: string;
   mediaType: 'video' | 'audio' | 'image';
+  hasAudio: boolean;
   fileName: string;
   mediaWidth: number;
   mediaHeight: number;
@@ -113,6 +122,7 @@ function SourceMonitorInner({
   mediaId,
   src,
   mediaType,
+  hasAudio,
   fileName,
   mediaWidth,
   mediaHeight,
@@ -294,7 +304,12 @@ function SourceMonitorInner({
       </div>
 
       {/* Controls bar - same height as program monitor */}
-      <SourcePlaybackControls durationInFrames={durationInFrames} fps={fps} />
+      <SourcePlaybackControls
+        durationInFrames={durationInFrames}
+        fps={fps}
+        mediaType={mediaType}
+        hasAudio={hasAudio}
+      />
     </div>
   );
 }
@@ -304,13 +319,23 @@ function SourceMonitorInner({
 function SourcePlaybackControls({
   durationInFrames,
   fps,
+  mediaType,
+  hasAudio,
 }: {
   durationInFrames: number;
   fps: number;
+  mediaType: 'video' | 'audio' | 'image';
+  hasAudio: boolean;
 }) {
   const player = usePlayer(durationInFrames);
   const { frame, playing } = useBridgedTimelineContext();
   const lastFrame = Math.max(0, durationInFrames - 1);
+  const tracks = useItemsStore((s) => s.tracks);
+  const activeTrackId = useSelectionStore((s) => s.activeTrackId);
+  const sourcePatchVideoEnabled = useEditorStore((s) => s.sourcePatchVideoEnabled);
+  const sourcePatchAudioEnabled = useEditorStore((s) => s.sourcePatchAudioEnabled);
+  const toggleSourcePatchVideoEnabled = useEditorStore((s) => s.toggleSourcePatchVideoEnabled);
+  const toggleSourcePatchAudioEnabled = useEditorStore((s) => s.toggleSourcePatchAudioEnabled);
 
   // Bridge player methods into the source player store for keyboard shortcuts
   useEffect(() => {
@@ -457,6 +482,84 @@ function SourcePlaybackControls({
     player.play();
   }, [player]);
 
+  const activeTrack = useMemo(
+    () => (activeTrackId ? tracks.find((track) => track.id === activeTrackId) ?? null : null),
+    [activeTrackId, tracks],
+  );
+
+  const patchTargetPreview = useMemo(() => {
+    if (!activeTrackId || !activeTrack) {
+      return {
+        videoTargetName: null,
+        audioTargetName: null,
+        status: 'Select target track',
+      };
+    }
+
+    if (activeTrack.locked) {
+      return {
+        videoTargetName: null,
+        audioTargetName: null,
+        status: 'Target track locked',
+      };
+    }
+
+    const resolvedTargets = resolveSourceEditTrackTargets({
+      tracks,
+      activeTrackId,
+      mediaType,
+      hasAudio,
+      patchVideo: sourcePatchVideoEnabled,
+      patchAudio: sourcePatchAudioEnabled,
+      preferredTrackHeight: activeTrack.height,
+    });
+
+    if (!resolvedTargets) {
+      let status = 'Enable V and/or A';
+      if (mediaType === 'audio' && !sourcePatchAudioEnabled) {
+        status = 'Enable A';
+      } else if ((mediaType === 'video' || mediaType === 'image') && !sourcePatchVideoEnabled && !hasAudio) {
+        status = 'Enable V';
+      }
+
+      return {
+        videoTargetName: null,
+        audioTargetName: null,
+        status,
+      };
+    }
+
+    const resolvedTracks = resolvedTargets.tracks;
+    return {
+      videoTargetName: resolvedTargets.videoTrackId
+        ? resolvedTracks.find((track) => track.id === resolvedTargets.videoTrackId)?.name ?? null
+        : null,
+      audioTargetName: resolvedTargets.audioTrackId
+        ? resolvedTracks.find((track) => track.id === resolvedTargets.audioTrackId)?.name ?? null
+        : null,
+      status: null,
+    };
+  }, [
+    activeTrack,
+    activeTrackId,
+    hasAudio,
+    mediaType,
+    sourcePatchAudioEnabled,
+    sourcePatchVideoEnabled,
+    tracks,
+  ]);
+
+  const videoPatchTooltip = patchTargetPreview.videoTargetName
+    ? `Video Source Patch On -> ${patchTargetPreview.videoTargetName}`
+    : sourcePatchVideoEnabled
+      ? 'Video Source Patch On'
+      : 'Video Source Patch Off';
+  const audioPatchTooltip = patchTargetPreview.audioTargetName
+    ? `Audio Source Patch On -> ${patchTargetPreview.audioTargetName}`
+    : sourcePatchAudioEnabled
+      ? 'Audio Source Patch On'
+      : 'Audio Source Patch Off';
+
   return (
     <div
       className="border-t border-border panel-header flex flex-col justify-center px-4 shrink-0 gap-1.5"
@@ -588,6 +691,63 @@ function SourcePlaybackControls({
             </TooltipTrigger>
             <TooltipContent side="top">Clear In/Out (Alt+X)</TooltipContent>
           </Tooltip>
+          <div className="w-px h-4 bg-border mx-0.5" />
+          <div className="flex items-center gap-1 shrink-0">
+            <div className="flex items-center gap-0.5 rounded-md border border-border bg-secondary/50 px-1 py-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`h-6 min-w-6 px-1.5 font-mono text-[11px] ${
+                      sourcePatchVideoEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+                    }`}
+                    onClick={toggleSourcePatchVideoEnabled}
+                    aria-label={sourcePatchVideoEnabled ? 'Disable video source patch target' : 'Enable video source patch target'}
+                    aria-pressed={sourcePatchVideoEnabled}
+                  >
+                    V
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{videoPatchTooltip}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={`h-6 min-w-6 px-1.5 font-mono text-[11px] ${
+                      sourcePatchAudioEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+                    }`}
+                    onClick={toggleSourcePatchAudioEnabled}
+                    aria-label={sourcePatchAudioEnabled ? 'Disable audio source patch target' : 'Enable audio source patch target'}
+                    aria-pressed={sourcePatchAudioEnabled}
+                  >
+                    A
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{audioPatchTooltip}</TooltipContent>
+              </Tooltip>
+            </div>
+            {patchTargetPreview.status ? (
+              <span className="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
+                {patchTargetPreview.status}
+              </span>
+            ) : (
+              <div className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground whitespace-nowrap">
+                {patchTargetPreview.videoTargetName ? (
+                  <span className="rounded border border-border/70 bg-secondary/60 px-1.5 py-0.5">
+                    {'V->'}{patchTargetPreview.videoTargetName}
+                  </span>
+                ) : null}
+                {patchTargetPreview.audioTargetName ? (
+                  <span className="rounded border border-border/70 bg-secondary/60 px-1.5 py-0.5">
+                    {'A->'}{patchTargetPreview.audioTargetName}
+                  </span>
+                ) : null}
+              </div>
+            )}
+          </div>
           <div className="w-px h-4 bg-border mx-0.5" />
           <Tooltip>
             <TooltipTrigger asChild>
