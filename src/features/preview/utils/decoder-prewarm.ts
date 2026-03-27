@@ -16,6 +16,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
+import { getObjectUrlBlob } from '@/infrastructure/browser/object-url-registry';
 import { getKeyframeTimestamps } from '@/shared/utils/keyframe-index-registry';
 
 const log = createLogger('DecoderPrewarm');
@@ -58,6 +59,7 @@ const pendingBatchRequests = new Map<string, {
 /** Cache of pre-decoded bitmaps keyed by video source URL. Multiple entries per source. */
 type CachedBitmapEntry = { bitmap: ImageBitmap; timestamp: number };
 const bitmapCache = new Map<string, CachedBitmapEntry[]>();
+const unavailableBlobUrls = new Set<string>();
 
 type InflightPreseek = {
   timestamp: number;
@@ -91,8 +93,6 @@ if (import.meta.env.DEV) {
 
 function handleWorkerMessage(event: MessageEvent): void {
   const msg = event.data;
-  // eslint-disable-next-line no-console
-  console.log('[DecoderPrewarm]', msg.type, msg.step || '', msg.success, msg.error || '', msg.src || '', !!msg.bitmap);
   if (msg.type === 'preseek_done') {
     const pending = pendingRequests.get(msg.id);
     if (pending) {
@@ -250,6 +250,45 @@ const blobByUrl = new Map<string, Blob>();
 /** Track sources whose keyframe index has been sent to at least one worker */
 const keyframesSentForSrc = new Set<string>();
 
+function getKnownBlobForUrl(src: string): Blob | null {
+  const cachedBlob = blobByUrl.get(src);
+  if (cachedBlob) {
+    unavailableBlobUrls.delete(src);
+    return cachedBlob;
+  }
+
+  const registeredBlob = getObjectUrlBlob(src);
+  if (!registeredBlob) {
+    return null;
+  }
+
+  blobByUrl.set(src, registeredBlob);
+  unavailableBlobUrls.delete(src);
+  return registeredBlob;
+}
+
+async function resolveBlobForUrl(src: string): Promise<Blob | null> {
+  const knownBlob = getKnownBlobForUrl(src);
+  if (knownBlob) {
+    return knownBlob;
+  }
+  if (!src.startsWith('blob:') || unavailableBlobUrls.has(src)) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(src);
+    const blob = await response.blob();
+    blobByUrl.set(src, blob);
+    unavailableBlobUrls.delete(src);
+    return blob;
+  } catch (error) {
+    unavailableBlobUrls.add(src);
+    log.debug('Failed to resolve blob URL for decoder prewarm', { src, error });
+    return null;
+  }
+}
+
 export function backgroundPreseek(src: string, timestamp: number): Promise<ImageBitmap | null> {
   const pw = acquireWorker();
   if (!pw) return Promise.resolve(null);
@@ -301,7 +340,6 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
 
     // Send the blob directly to avoid slow UrlSource fetch in the worker.
     // Blobs are transferred via structured clone — fast and avoids re-fetch.
-    decoderPrewarmMetrics.workerPosts += 1;
     const w = pw.worker;
 
     // Include keyframe index on first preseek per source so worker can
@@ -312,20 +350,43 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
       if (keyframeTimestamps) keyframesSentForSrc.add(src);
     }
 
-    const cachedBlob = blobByUrl.get(src);
+    const postRequest = (blob?: Blob) => {
+      if (!pendingRequests.has(id)) {
+        return;
+      }
+      decoderPrewarmMetrics.workerPosts += 1;
+      w.postMessage(blob
+        ? { type: 'preseek', id, src, timestamp, blob, keyframeTimestamps }
+        : { type: 'preseek', id, src, timestamp, keyframeTimestamps });
+    };
+
+    const failRequest = () => {
+      const pending = pendingRequests.get(id);
+      if (!pending) {
+        return;
+      }
+      pendingRequests.delete(id);
+      pending.resolve(null);
+    };
+
+    const cachedBlob = getKnownBlobForUrl(src);
     if (cachedBlob) {
-      w.postMessage({ type: 'preseek', id, src, timestamp, blob: cachedBlob, keyframeTimestamps });
+      postRequest(cachedBlob);
     } else if (src.startsWith('blob:')) {
-      // Fetch the blob URL to get the actual Blob, then send it
-      void fetch(src).then((r) => r.blob()).then((blob) => {
-        blobByUrl.set(src, blob);
-        w.postMessage({ type: 'preseek', id, src, timestamp, blob, keyframeTimestamps });
-      }).catch(() => {
-        // Fallback to UrlSource
-        w.postMessage({ type: 'preseek', id, src, timestamp, keyframeTimestamps });
+      if (unavailableBlobUrls.has(src)) {
+        failRequest();
+        return;
+      }
+
+      void resolveBlobForUrl(src).then((blob) => {
+        if (blob) {
+          postRequest(blob);
+          return;
+        }
+        failRequest();
       });
     } else {
-      w.postMessage({ type: 'preseek', id, src, timestamp, keyframeTimestamps });
+      postRequest();
     }
   });
   const inflightEntry: InflightPreseek = { timestamp, promise };
@@ -389,19 +450,44 @@ export function backgroundBatchPreseek(
     });
 
     const w = pw.worker;
-    const cachedBlob = blobByUrl.get(src);
-    const msg = { type: 'batch_preseek', id, src, timestamps, keyframeTimestamps, blob: cachedBlob };
-    if (cachedBlob) {
+    const postRequest = (blob?: Blob) => {
+      if (!pendingBatchRequests.has(id)) {
+        return;
+      }
+      decoderPrewarmMetrics.workerPosts += 1;
+      const msg = blob
+        ? { type: 'batch_preseek', id, src, timestamps, keyframeTimestamps, blob }
+        : { type: 'batch_preseek', id, src, timestamps, keyframeTimestamps };
       w.postMessage(msg);
+    };
+
+    const failRequest = () => {
+      const pending = pendingBatchRequests.get(id);
+      if (!pending) {
+        return;
+      }
+      pendingBatchRequests.delete(id);
+      pending.resolve(new Map());
+    };
+
+    const cachedBlob = getKnownBlobForUrl(src);
+    if (cachedBlob) {
+      postRequest(cachedBlob);
     } else if (src.startsWith('blob:')) {
-      void fetch(src).then((r) => r.blob()).then((blob) => {
-        blobByUrl.set(src, blob);
-        w.postMessage({ ...msg, blob });
-      }).catch(() => {
-        w.postMessage(msg);
+      if (unavailableBlobUrls.has(src)) {
+        failRequest();
+        return;
+      }
+
+      void resolveBlobForUrl(src).then((blob) => {
+        if (blob) {
+          postRequest(blob);
+          return;
+        }
+        failRequest();
       });
     } else {
-      w.postMessage(msg);
+      postRequest();
     }
   });
 
@@ -482,6 +568,7 @@ export function clearPredecodedCache(src?: string): void {
     }
     bitmapCache.delete(src);
     blobByUrl.delete(src);
+    unavailableBlobUrls.delete(src);
     keyframesSentForSrc.delete(src);
   } else {
     for (const entries of bitmapCache.values()) {
@@ -489,6 +576,7 @@ export function clearPredecodedCache(src?: string): void {
     }
     bitmapCache.clear();
     blobByUrl.clear();
+    unavailableBlobUrls.clear();
     keyframesSentForSrc.clear();
   }
   decoderPrewarmMetrics.cacheSources = bitmapCache.size;
