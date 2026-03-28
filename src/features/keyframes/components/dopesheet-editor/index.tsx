@@ -1463,6 +1463,40 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const marqueeJustEndedRef = useRef(false);
   const selectionAnchorByPropertyRef = useRef(new Map<AnimatableProperty, string>());
 
+  const getMarqueeModeFromPointerEvent = useCallback(
+    (event: Pick<React.PointerEvent, 'shiftKey' | 'ctrlKey' | 'metaKey'>): MarqueeMode =>
+      event.shiftKey
+        ? 'add'
+        : (event.ctrlKey || event.metaKey)
+          ? 'toggle'
+          : 'replace',
+    []
+  );
+
+  const beginMarqueeSelection = useCallback(
+    (
+      pointerId: number,
+      clientX: number,
+      clientY: number,
+      mode: MarqueeMode,
+      baseSelection: Set<string>
+    ) => {
+      const startX = getTimelineXFromClientX(clientX);
+      const startY = getContentYFromClientY(clientY);
+      marqueeStateRef.current = {
+        pointerId,
+        startX,
+        startY,
+        currentX: startX,
+        currentY: startY,
+        mode,
+        baseSelection,
+        started: false,
+      };
+    },
+    [getContentYFromClientY, getTimelineXFromClientX]
+  );
+
   const handleKeyframePointerDown = useCallback(
     (
       property: AnimatableProperty,
@@ -1604,28 +1638,37 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       event.stopPropagation();
       onActivePropertyChange?.(property);
 
-      const mode: MarqueeMode = event.shiftKey
-        ? 'add'
-        : (event.ctrlKey || event.metaKey)
-          ? 'toggle'
-          : 'replace';
-
-      const startX = getTimelineXFromClientX(event.clientX);
-      const startY = getContentYFromClientY(event.clientY);
-      marqueeStateRef.current = {
-        pointerId: event.pointerId,
-        startX,
-        startY,
-        currentX: startX,
-        currentY: startY,
-        mode,
-        baseSelection: new Set(selectedKeyframeIds),
-        started: false,
-      };
+      beginMarqueeSelection(
+        event.pointerId,
+        event.clientX,
+        event.clientY,
+        getMarqueeModeFromPointerEvent(event),
+        new Set(selectedKeyframeIds)
+      );
 
       event.currentTarget.setPointerCapture(event.pointerId);
     },
-    [disabled, getTimelineXFromClientX, getContentYFromClientY, isPropertyLocked, onActivePropertyChange, selectedKeyframeIds]
+    [beginMarqueeSelection, disabled, getMarqueeModeFromPointerEvent, isPropertyLocked, onActivePropertyChange, selectedKeyframeIds]
+  );
+
+  const handleTimelineBackgroundPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (disabled) return;
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+
+      beginMarqueeSelection(
+        event.pointerId,
+        event.clientX,
+        event.clientY,
+        getMarqueeModeFromPointerEvent(event),
+        new Set(selectedKeyframeIds)
+      );
+
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    [beginMarqueeSelection, disabled, getMarqueeModeFromPointerEvent, selectedKeyframeIds]
   );
 
   useEffect(() => {
@@ -2355,7 +2398,10 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               style={{ ...propertyGridStyle, height: GROUP_HEADER_HEIGHT }}
             >
               {renderGroupHeaderContent(entry.group)}
-              <div className="border-l border-border/60 bg-muted/20" />
+              <div
+                className="border-l border-border/60 bg-muted/20"
+                onPointerDown={handleTimelineBackgroundPointerDown}
+              />
             </div>
           );
         }
@@ -2431,6 +2477,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       renderedSheetEntries.entries,
       propertyGridStyle,
       handleRowPointerDown,
+      handleTimelineBackgroundPointerDown,
       renderGroupHeaderContent,
       renderPropertyRowContent,
       isPropertyLocked,
@@ -2779,8 +2826,16 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                   {emptyStateMessage}
                 </div>
               ) : (
-                <div className="relative">
-                  {rowElements}
+                <div className="relative min-h-full">
+                  <div
+                    data-testid="dopesheet-selection-surface"
+                    className="absolute inset-y-0 right-0 z-0"
+                    style={{ left: PROPERTY_COLUMN_WIDTH }}
+                    onPointerDown={handleTimelineBackgroundPointerDown}
+                  />
+                  <div className="relative z-10">
+                    {rowElements}
+                  </div>
                   {marqueeRect && !marqueeJustEndedRef.current && (
                     <KeyframeMarqueeOverlay
                       rect={{
