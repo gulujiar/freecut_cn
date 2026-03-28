@@ -5,6 +5,7 @@ import { createLogger } from '@/shared/logging/logger';
 const logger = createLogger('MediaLibrary');
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Slider } from '@/components/ui/slider';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +28,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { MarqueeOverlay } from '@/components/marquee-overlay';
 import { cn } from '@/shared/ui/cn';
 import { MediaGrid } from './media-grid';
 import { MediaInfoPanel } from './media-info-panel';
@@ -34,8 +36,9 @@ import { CompositionsSection } from './compositions-section';
 import { MissingMediaDialog } from './missing-media-dialog';
 import { OrphanedClipsDialog } from './orphaned-clips-dialog';
 import { UnsupportedAudioCodecDialog } from './unsupported-audio-codec-dialog';
-import { useMediaLibraryStore } from '../stores/media-library-store';
+import { useFilteredMediaItems, useMediaLibraryStore } from '../stores/media-library-store';
 import {
+  useCompositionsStore,
   useTimelineStore,
   useCompositionNavigationStore,
 } from '@/features/media-library/deps/timeline-stores';
@@ -44,6 +47,7 @@ import { proxyService } from '../services/proxy-service';
 import { mediaLibraryService } from '../services/media-library-service';
 import { extractValidMediaFileEntriesFromDataTransfer } from '../utils/file-drop';
 import { getSharedProxyKey } from '../utils/proxy-key';
+import { isMarqueeJustFinished, useMarqueeSelection, type MarqueeItem } from '@/hooks/use-marquee-selection';
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -67,11 +71,17 @@ interface MediaLibraryProps {
   onMediaSelect?: (mediaId: string) => void;
 }
 
+interface PendingLibraryDeletion {
+  mediaIds: string[];
+  compositionIds: string[];
+}
+
 export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaLibraryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isFocusedRef = useRef(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [idsToDelete, setIdsToDelete] = useState<string[]>([]);
+  const [pendingDeletion, setPendingDeletion] = useState<PendingLibraryDeletion>({ mediaIds: [], compositionIds: [] });
   const [infoPanelDismissed, setInfoPanelDismissed] = useState(false);
   const [mediaOpen, setMediaOpen] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
@@ -96,7 +106,11 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const setSortBy = useMediaLibraryStore((s) => s.setSortBy);
   const viewMode = useMediaLibraryStore((s) => s.viewMode);
   const setViewMode = useMediaLibraryStore((s) => s.setViewMode);
+  const mediaItemSize = useMediaLibraryStore((s) => s.mediaItemSize);
+  const setMediaItemSize = useMediaLibraryStore((s) => s.setMediaItemSize);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
+  const selectedCompositionIds = useMediaLibraryStore((s) => s.selectedCompositionIds);
+  const setSelection = useMediaLibraryStore((s) => s.setSelection);
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
   const mediaById = useMediaLibraryStore((s) => s.mediaById);
   const clearSelection = useMediaLibraryStore((s) => s.clearSelection);
@@ -110,6 +124,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const projectStoreProjectId = useProjectStore((s) => s.currentProject?.id ?? null);
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus);
   const proxyProgress = useMediaLibraryStore((s) => s.proxyProgress);
+  const filteredMediaItems = useFilteredMediaItems();
+  const compositions = useCompositionsStore((s) => s.compositions);
+  const removeComposition = useCompositionsStore((s) => s.removeComposition);
 
   // Composition navigation â€” show banner when inside a sub-comp
   const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId);
@@ -144,22 +161,85 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     }
   }, []); // Intentionally empty - run only on mount
 
-  // Reset info panel dismissed state when selection changes
-  const prevSelectionRef = useRef<string[]>([]);
-  useEffect(() => {
-    const changed = selectedMediaIds.length !== prevSelectionRef.current.length ||
-      selectedMediaIds.some((id, i) => id !== prevSelectionRef.current[i]);
-    if (changed) {
-      setInfoPanelDismissed(false);
-      prevSelectionRef.current = selectedMediaIds;
-    }
-  }, [selectedMediaIds]);
+  const selectedAssetCount = selectedMediaIds.length + selectedCompositionIds.length;
+  const deleteAssetCount = pendingDeletion.mediaIds.length + pendingDeletion.compositionIds.length;
+  const prevSelectionKeyRef = useRef('');
+  const selectionKey = useMemo(
+    () => `m:${selectedMediaIds.join(',')}|c:${selectedCompositionIds.join(',')}`,
+    [selectedCompositionIds, selectedMediaIds]
+  );
 
-  // Resolve the selected media item for the info panel (single selection only)
+  // Reset info panel dismissed state when selection changes
+  useEffect(() => {
+    if (selectionKey !== prevSelectionKeyRef.current) {
+      setInfoPanelDismissed(false);
+      prevSelectionKeyRef.current = selectionKey;
+    }
+  }, [selectionKey]);
+
+  // Resolve the selected media item for the info panel (single media selection only)
   const selectedMediaForInfo = useMemo(() => {
-    if (selectedMediaIds.length !== 1 || infoPanelDismissed) return null;
+    if (selectedCompositionIds.length > 0 || selectedMediaIds.length !== 1 || infoPanelDismissed) return null;
     return mediaById[selectedMediaIds[0]!] ?? null;
-  }, [selectedMediaIds, mediaById, infoPanelDismissed]);
+  }, [selectedCompositionIds.length, selectedMediaIds, mediaById, infoPanelDismissed]);
+
+  const marqueeItems: MarqueeItem[] = useMemo(
+    () => [
+      ...compositions.map((composition) => ({
+        id: `composition:${composition.id}`,
+        getBoundingRect: () => {
+          const element = scrollContainerRef.current?.querySelector(`[data-composition-id="${composition.id}"]`);
+          if (!element) return null;
+          const rect = element.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            width: rect.width,
+            height: rect.height,
+          };
+        },
+      })),
+      ...filteredMediaItems.map((media) => ({
+        id: `media:${media.id}`,
+        getBoundingRect: () => {
+          const element = scrollContainerRef.current?.querySelector(`[data-media-id="${media.id}"]`);
+          if (!element) return null;
+          const rect = element.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            width: rect.width,
+            height: rect.height,
+          };
+        },
+      })),
+    ],
+    [compositions, filteredMediaItems]
+  );
+
+  const { marqueeState } = useMarqueeSelection({
+    containerRef: scrollContainerRef as React.RefObject<HTMLElement>,
+    items: marqueeItems,
+    enabled: marqueeItems.length > 0,
+    onSelectionChange: (ids) => {
+      const nextMediaIds: string[] = [];
+      const nextCompositionIds: string[] = [];
+
+      for (const id of ids) {
+        if (id.startsWith('media:')) {
+          nextMediaIds.push(id.slice('media:'.length));
+        } else if (id.startsWith('composition:')) {
+          nextCompositionIds.push(id.slice('composition:'.length));
+        }
+      }
+
+      setSelection({ mediaIds: nextMediaIds, compositionIds: nextCompositionIds });
+    },
+  });
 
   // Track focus and clear selection when clicking outside the media library
   useEffect(() => {
@@ -172,7 +252,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       } else {
         // Clicked outside - clear focus and selection
         isFocusedRef.current = false;
-        if (selectedMediaIds.length > 0) {
+        if (selectedAssetCount > 0) {
           clearSelection();
         }
       }
@@ -184,7 +264,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     return () => {
       document.removeEventListener('mousedown', handleMouseDown, true);
     };
-  }, [selectedMediaIds.length, clearSelection]);
+  }, [selectedAssetCount, clearSelection]);
 
   // Handle Delete key to delete selected items
   useEffect(() => {
@@ -196,7 +276,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       if (!isFocusedRef.current) return;
 
       // Don't trigger if no items selected
-      if (selectedMediaIds.length === 0) return;
+      if (selectedAssetCount === 0) return;
 
       // Don't trigger if dialog is already open
       if (showDeleteDialog) return;
@@ -209,7 +289,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
       // Prevent default behavior and trigger delete
       event.preventDefault();
-      setIdsToDelete([...selectedMediaIds]);
+      setPendingDeletion({
+        mediaIds: [...selectedMediaIds],
+        compositionIds: [...selectedCompositionIds],
+      });
       setShowDeleteDialog(true);
     };
 
@@ -218,7 +301,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     return () => {
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [selectedMediaIds, showDeleteDialog]);
+  }, [selectedAssetCount, selectedCompositionIds, selectedMediaIds, showDeleteDialog]);
 
   // Import files using file picker (instant, no copy)
   const handleImport = async () => {
@@ -278,7 +361,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       const jsonData = e.dataTransfer.getData('application/json');
       if (jsonData) {
         const data = JSON.parse(jsonData);
-        if (data.type === 'media-item' || data.type === 'media-items') {
+        if (data.type === 'media-item' || data.type === 'media-items' || data.type === 'composition') {
           return;
         }
       }
@@ -356,38 +439,71 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     }).length;
   }, [selectedMediaIds, mediaById, proxyStatus]);
 
-  // Find timeline items that reference the media being deleted (for batch delete from selection)
-  // Read from store directly to avoid subscribing to items array
+  const deleteSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (pendingDeletion.mediaIds.length > 0) {
+      parts.push(`${pendingDeletion.mediaIds.length} media item${pendingDeletion.mediaIds.length === 1 ? '' : 's'}`);
+    }
+    if (pendingDeletion.compositionIds.length > 0) {
+      parts.push(`${pendingDeletion.compositionIds.length} composition${pendingDeletion.compositionIds.length === 1 ? '' : 's'}`);
+    }
+    return parts.join(' and ');
+  }, [pendingDeletion.compositionIds.length, pendingDeletion.mediaIds.length]);
+
+  // Read from stores directly to avoid subscribing to timeline items array
   const affectedTimelineItems = useMemo(() => {
-    if (idsToDelete.length === 0) return [];
+    if (deleteAssetCount === 0) return [];
     const timelineItems = useTimelineStore.getState().items;
-    return timelineItems.filter((item) => item.mediaId && idsToDelete.includes(item.mediaId));
-  }, [idsToDelete]);
+    return timelineItems.filter(
+      (item) =>
+        (item.mediaId && pendingDeletion.mediaIds.includes(item.mediaId))
+        || (item.type === 'composition' && item.compositionId && pendingDeletion.compositionIds.includes(item.compositionId))
+    );
+  }, [deleteAssetCount, pendingDeletion]);
 
   const handleDeleteSelected = () => {
-    if (selectedMediaIds.length === 0) return;
+    if (selectedAssetCount === 0) return;
     // Capture the IDs BEFORE opening dialog (selection may be cleared by click outside)
-    setIdsToDelete([...selectedMediaIds]);
+    setPendingDeletion({
+      mediaIds: [...selectedMediaIds],
+      compositionIds: [...selectedCompositionIds],
+    });
     setShowDeleteDialog(true);
   };
 
   const handleConfirmDelete = async () => {
     setShowDeleteDialog(false);
     try {
-      // First remove timeline items that reference this media
+      // First remove timeline items that reference selected library assets
       if (affectedTimelineItems.length > 0) {
         const timelineItemIds = affectedTimelineItems.map((item) => item.id);
         removeTimelineItems(timelineItemIds);
       }
 
-      // Then delete the media from the library
-      await deleteMediaBatch(idsToDelete);
-      setIdsToDelete([]); // Clear after successful delete
+      if (pendingDeletion.mediaIds.length > 0) {
+        await deleteMediaBatch(pendingDeletion.mediaIds);
+      }
+
+      for (const compositionId of pendingDeletion.compositionIds) {
+        removeComposition(compositionId);
+      }
+
+      clearSelection();
+      setPendingDeletion({ mediaIds: [], compositionIds: [] });
     } catch (error) {
       logger.error('Delete failed:', error);
-      setIdsToDelete([]); // Clear even on error
+      setPendingDeletion({ mediaIds: [], compositionIds: [] });
     }
   };
+
+  const handleScrollContentClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    if (isMarqueeJustFinished()) return;
+
+    const target = event.target as HTMLElement;
+    if (!target.closest('[data-media-id], [data-composition-id]')) {
+      clearSelection();
+    }
+  }, [clearSelection]);
 
   return (
     <div ref={containerRef} className="h-full flex flex-col">
@@ -426,13 +542,13 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
 
           {/* Selection indicator & actions */}
-          {selectedMediaIds.length > 0 && (
+          {selectedAssetCount > 0 && (
             <>
               <div className="h-4 w-px bg-border" />
 
               {/* Selection badge */}
               <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border">
-                <span className="tabular-nums">{selectedMediaIds.length}</span>
+                <span className="tabular-nums">{selectedAssetCount}</span>
                 <span className="text-muted-foreground">selected</span>
                 <button
                   onClick={clearSelection}
@@ -647,32 +763,45 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* View mode toggle */}
-          <div className="flex items-center border border-border rounded bg-secondary ml-auto">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setViewMode('grid')}
-              className={`h-6 w-6 p-0 rounded-none rounded-l ${
-                viewMode === 'grid'
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Grid3x3 className="w-3 h-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setViewMode('list')}
-              className={`h-6 w-6 p-0 rounded-none rounded-r ${
-                viewMode === 'list'
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <List className="w-3 h-3" />
-            </Button>
+          {/* View mode toggle + item size */}
+          <div className="flex items-center gap-2 ml-auto">
+            {viewMode === 'grid' && (
+              <Slider
+                min={1}
+                max={5}
+                step={1}
+                value={[mediaItemSize]}
+                onValueChange={([v]) => setMediaItemSize(v ?? 3)}
+                className="w-16"
+                aria-label="Grid item size"
+              />
+            )}
+            <div className="flex items-center border border-border rounded bg-secondary">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode('grid')}
+                className={`h-6 w-6 p-0 rounded-none rounded-l ${
+                  viewMode === 'grid'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Grid3x3 className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode('list')}
+                className={`h-6 w-6 p-0 rounded-none rounded-r ${
+                  viewMode === 'list'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <List className="w-3 h-3" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -695,12 +824,16 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       {/* Scrollable content: wrapper provides relative context for the drag overlay */}
       <div className="flex-1 relative min-h-0">
         <div
-          className="h-full overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]"
+          ref={scrollContainerRef}
+          className="relative h-full overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]"
+          onClick={handleScrollContentClick}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
+          <MarqueeOverlay marqueeState={marqueeState} />
+
           {/* Compositions section â€” collapsible, auto-hidden when empty */}
           <CompositionsSection />
 
@@ -725,6 +858,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               <MediaGrid
                 onMediaSelect={onMediaSelect}
                 viewMode={viewMode}
+                itemSize={mediaItemSize}
               />
             </CollapsibleContent>
           </Collapsible>
@@ -794,14 +928,22 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       )}
 
       {/* Delete confirmation dialog */}
-      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+      <AlertDialog
+        open={showDeleteDialog}
+        onOpenChange={(open) => {
+          setShowDeleteDialog(open);
+          if (!open) {
+            setPendingDeletion({ mediaIds: [], compositionIds: [] });
+          }
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete selected items?</AlertDialogTitle>
+            <AlertDialogTitle>Delete selected assets?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  Are you sure you want to delete {idsToDelete.length} selected item{idsToDelete.length > 1 ? 's' : ''}?
+                  Are you sure you want to delete {deleteSummary || `${deleteAssetCount} selected asset${deleteAssetCount === 1 ? '' : 's'}`}?
                   This action cannot be undone.
                 </p>
                 {affectedTimelineItems.length > 0 && (
@@ -810,7 +952,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
                       <p className="font-medium">Timeline clips will be removed</p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        {affectedTimelineItems.length} clip{affectedTimelineItems.length > 1 ? 's' : ''} in the timeline use{affectedTimelineItems.length === 1 ? 's' : ''} this media and will also be deleted.
+                        {affectedTimelineItems.length} clip{affectedTimelineItems.length > 1 ? 's' : ''} in the timeline reference{affectedTimelineItems.length === 1 ? 's' : ''} these assets and will also be deleted.
                       </p>
                     </div>
                   </div>
@@ -821,7 +963,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete {idsToDelete.length} item{idsToDelete.length > 1 ? 's' : ''}{affectedTimelineItems.length > 0 ? ` & ${affectedTimelineItems.length} clip${affectedTimelineItems.length > 1 ? 's' : ''}` : ''}
+              Delete {deleteSummary || `${deleteAssetCount} asset${deleteAssetCount === 1 ? '' : 's'}`}{affectedTimelineItems.length > 0 ? ` & ${affectedTimelineItems.length} clip${affectedTimelineItems.length > 1 ? 's' : ''}` : ''}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

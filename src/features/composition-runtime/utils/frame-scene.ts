@@ -172,3 +172,28 @@ export function resolveFrameCompositionScene({
     }),
   };
 }
+
+/**
+ * Cached version of resolveFrameCompositionScene.
+ * Returns the cached result when called with the same frame number consecutively
+ * (common during playback where the same frame renders at multiple vsyncs).
+ */
+let _cachedScene: FrameCompositionScene | null = null;
+let _cachedSceneFrame = -1;
+
+export function resolveFrameCompositionSceneCached(
+  params: Parameters<typeof resolveFrameCompositionScene>[0],
+): FrameCompositionScene {
+  if (_cachedScene && _cachedSceneFrame === params.frame) {
+    return _cachedScene;
+  }
+  _cachedSceneFrame = params.frame;
+  _cachedScene = resolveFrameCompositionScene(params);
+  return _cachedScene;
+}
+
+/** Invalidate the cached scene (call when composition structure changes). */
+export function invalidateFrameSceneCache(): void {
+  _cachedScene = null;
+  _cachedSceneFrame = -1;
+}

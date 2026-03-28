@@ -1,5 +1,6 @@
 import { useCallback, useMemo, memo } from 'react';
 import { Droplet, RotateCcw } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -15,7 +16,7 @@ import type { BlendMode } from '@/types/blend-modes';
 import { BLEND_MODE_GROUPS, BLEND_MODE_LABELS } from '@/types/blend-modes';
 import type { TransformProperties, CanvasSettings } from '@/types/transform';
 import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
-import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import { useKeyframesStore, useTimelineStore } from '@/features/editor/deps/timeline-store';
 import {
   resolveTransform,
   getSourceDimensions,
@@ -51,12 +52,26 @@ export const FillSection = memo(function FillSection({
   onTransformChange,
 }: FillSectionProps) {
   const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+  const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
 
   // Get current playhead frame for keyframe animation (throttled to reduce re-renders)
   const currentFrame = useThrottledFrame();
 
-  // Get keyframes for all selected items
-  const allKeyframes = useTimelineStore((s) => s.keyframes);
+  const itemKeyframes = useKeyframesStore(
+    useShallow(
+      useCallback(
+        (s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null),
+        [itemIds]
+      )
+    )
+  );
+  const keyframesByItemId = useMemo(() => {
+    const map = new Map<string, (typeof itemKeyframes)[number]>();
+    for (const [index, itemId] of itemIds.entries()) {
+      map.set(itemId, itemKeyframes[index] ?? null);
+    }
+    return map;
+  }, [itemIds, itemKeyframes]);
 
   // Item update for non-transform properties (blend mode)
   const updateItem = useTimelineStore((s) => s.updateItem);
@@ -72,15 +87,15 @@ export const FillSection = memo(function FillSection({
       return { opacityRaw: 1 as MixedValue, cornerRadius: 0 as MixedValue };
     }
 
-    const resolvedValues = items.map((item) => {
-      const sourceDimensions = getSourceDimensions(item);
-      const baseResolved = resolveTransform(item, canvas, sourceDimensions);
+      const resolvedValues = items.map((item) => {
+        const sourceDimensions = getSourceDimensions(item);
+        const baseResolved = resolveTransform(item, canvas, sourceDimensions);
 
-      // Apply keyframe animation if item has keyframes
-      const itemKeyframes = allKeyframes.find((k) => k.itemId === item.id);
-      if (itemKeyframes) {
-        const relativeFrame = currentFrame - item.from;
-        return resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame);
+        // Apply keyframe animation if item has keyframes
+        const itemKeyframes = keyframesByItemId.get(item.id) ?? undefined;
+        if (itemKeyframes) {
+          const relativeFrame = currentFrame - item.from;
+          return resolveAnimatedTransform(baseResolved, itemKeyframes, relativeFrame);
       }
 
       return baseResolved;
@@ -96,7 +111,7 @@ export const FillSection = memo(function FillSection({
       opacityRaw: getVal((r) => r.opacity),
       cornerRadius: getVal((r) => r.cornerRadius),
     };
-  }, [items, canvas, allKeyframes, currentFrame]);
+  }, [items, canvas, keyframesByItemId, currentFrame]);
 
   const opacity = opacityRaw === 'mixed' ? 'mixed' : Math.round(opacityRaw * 100);
 
@@ -106,25 +121,25 @@ export const FillSection = memo(function FillSection({
   // Helper: Check if opacity has keyframes and auto-keyframe on value change
   const autoKeyframeOpacity = useCallback(
     (itemId: string, value: number): AutoKeyframeOperation | null => {
-      const item = items.find((i) => i.id === itemId);
+      const item = itemsById.get(itemId);
       if (!item) return null;
 
-      const itemKeyframes = allKeyframes.find((k) => k.itemId === itemId);
+      const itemKeyframes = keyframesByItemId.get(itemId) ?? undefined;
       return getAutoKeyframeOperation(item, itemKeyframes, 'opacity', value, currentFrame);
     },
-    [items, allKeyframes, currentFrame]
+    [currentFrame, itemsById, keyframesByItemId]
   );
 
   // Helper: Check if cornerRadius has keyframes and auto-keyframe on value change
   const autoKeyframeCornerRadius = useCallback(
     (itemId: string, value: number): AutoKeyframeOperation | null => {
-      const item = items.find((i) => i.id === itemId);
+      const item = itemsById.get(itemId);
       if (!item) return null;
 
-      const itemKeyframes = allKeyframes.find((k) => k.itemId === itemId);
+      const itemKeyframes = keyframesByItemId.get(itemId) ?? undefined;
       return getAutoKeyframeOperation(item, itemKeyframes, 'cornerRadius', value, currentFrame);
     },
-    [items, allKeyframes, currentFrame]
+    [currentFrame, itemsById, keyframesByItemId]
   );
 
   // Live preview for opacity (during drag)

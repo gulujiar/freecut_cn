@@ -1,5 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
+import { usePlaybackStore } from '@/shared/state/playback';
+import { useEditorStore } from '@/shared/state/editor';
+import { DRAG_THRESHOLD_PIXELS } from '../constants';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { useSelectionStore } from '@/shared/state/selection';
@@ -7,6 +10,7 @@ import { useTimelineZoom } from './use-timeline-zoom';
 import { useSnapCalculator } from './use-snap-calculator';
 import { useSlipEditPreviewStore } from '../stores/slip-edit-preview-store';
 import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store';
+import { useLinkedEditPreviewStore } from '../stores/linked-edit-preview-store';
 import { slipItem, slideItem } from '../stores/actions/item-actions';
 import {
   getSourceProperties,
@@ -16,6 +20,19 @@ import {
 import { clampTrimAmount } from '../utils/trim-utils';
 import { findEditNeighborsWithTransitions } from '../utils/transition-linked-neighbors';
 import { computeClampedSlipDelta } from '../utils/slip-utils';
+import {
+  getMatchingSynchronizedLinkedCounterpart,
+  getSynchronizedLinkedItems,
+} from '../utils/linked-items';
+import { clampSlipDeltaToPreserveTransitions, clampSlideDeltaToPreserveTransitions } from '../utils/transition-utils';
+import {
+  applyMovePreview,
+  applySlipPreview,
+  applyTrimEndPreview,
+  applyTrimStartPreview,
+  type PreviewItemUpdate,
+} from '../utils/item-edit-preview';
+import { hasExceededDragThreshold } from '../utils/drag-threshold';
 
 interface SlipSlideState {
   isActive: boolean;
@@ -24,6 +41,13 @@ interface SlipSlideState {
   currentDelta: number;
   leftNeighborId: string | null;
   rightNeighborId: string | null;
+  isConstrained: boolean;
+  constraintEdge: 'start' | 'end' | null;
+  constraintLabel: string | null;
+}
+
+interface SlipSlideStartOptions {
+  activateOnMoveThreshold?: boolean;
 }
 
 /**
@@ -32,7 +56,7 @@ interface SlipSlideState {
  * Slip: shifts source content within a fixed clip window.
  * Slide: moves clip on timeline, adjusting adjacent neighbors.
  *
- * Only operates on video/audio items.
+ * Only operates on source-bounded items (video/audio/compound wrappers).
  */
 export function useTimelineSlipSlide(
   item: TimelineItem,
@@ -55,11 +79,15 @@ export function useTimelineSlipSlide(
     currentDelta: 0,
     leftNeighborId: null,
     rightNeighborId: null,
+    isConstrained: false,
+    constraintEdge: null,
+    constraintLabel: null,
   });
 
   const stateRef = useRef(state);
   stateRef.current = state;
   const latestDeltaRef = useRef(0);
+  const pendingStartCleanupRef = useRef<(() => void) | null>(null);
 
   const getItemFromStore = useCallback(() => {
     return useTimelineStore.getState().items.find((i) => i.id === item.id) ?? item;
@@ -75,6 +103,31 @@ export function useTimelineSlipSlide(
     const transitions = useTransitionsStore.getState().transitions;
     return findEditNeighborsWithTransitions(currentItem, allItems, transitions);
   }, [getItemFromStore]);
+
+  const beginSlipSlideGesture = useCallback((startX: number, mode: 'slip' | 'slide') => {
+    usePlaybackStore.getState().setPreviewFrame(null);
+
+    const { leftNeighbor, rightNeighbor } = findNeighbors();
+
+    setDragState({
+      isDragging: true,
+      draggedItemIds: [item.id],
+      offset: { x: 0, y: 0 },
+    });
+
+    setState({
+      isActive: true,
+      mode,
+      startX,
+      currentDelta: 0,
+      leftNeighborId: leftNeighbor?.id ?? null,
+      rightNeighborId: rightNeighbor?.id ?? null,
+      isConstrained: false,
+      constraintEdge: null,
+      constraintLabel: null,
+    });
+    latestDeltaRef.current = 0;
+  }, [findNeighbors, item.id, setDragState]);
 
   /**
    * Clamp slip delta to source boundaries.
@@ -144,7 +197,25 @@ export function useTimelineSlipSlide(
         const effectiveSourceFps = sourceFps ?? fps;
         const sourceFramesDelta = timelineToSourceFrames(deltaFrames, speed, fps, effectiveSourceFps);
 
-        const clamped = clampSlipDelta(sourceFramesDelta);
+        const sourceClamped = clampSlipDelta(sourceFramesDelta);
+        const transitionClamped = clampSlipDeltaToPreserveTransitions(
+          currentItem,
+          sourceClamped,
+          useTimelineStore.getState().items,
+          useTransitionsStore.getState().transitions,
+        );
+        const clamped = transitionClamped;
+        const isConstrained = clamped !== sourceFramesDelta;
+        const constraintEdge = !isConstrained
+          ? null
+          : sourceFramesDelta > clamped
+          ? 'end'
+          : 'start';
+        const constraintLabel = clamped !== sourceClamped
+          ? 'transition limit'
+          : sourceClamped !== sourceFramesDelta
+          ? 'no handle'
+          : null;
 
         // Update preview store
         const previewStore = useSlipEditPreviewStore.getState();
@@ -161,10 +232,33 @@ export function useTimelineSlipSlide(
           previewStore.setSlipDelta(clamped);
         }
 
-        if (clamped !== latestDeltaRef.current) {
+        if (
+          clamped !== latestDeltaRef.current
+          || isConstrained !== stateRef.current.isConstrained
+          || constraintEdge !== stateRef.current.constraintEdge
+          || constraintLabel !== stateRef.current.constraintLabel
+        ) {
           latestDeltaRef.current = clamped;
-          setState((prev) => ({ ...prev, currentDelta: clamped }));
+          setState((prev) => ({
+            ...prev,
+            currentDelta: clamped,
+            isConstrained,
+            constraintEdge,
+            constraintLabel,
+          }));
         }
+
+        const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled;
+        const linkedPreviewUpdates: PreviewItemUpdate[] = linkedSelectionEnabled
+          ? getSynchronizedLinkedItems(
+            useTimelineStore.getState().items,
+            currentItem.id,
+          )
+            .filter((linkedItem) => linkedItem.id !== currentItem.id)
+            .map((linkedItem) => applySlipPreview(linkedItem, clamped))
+          : [];
+        useLinkedEditPreviewStore.getState().setUpdates(linkedPreviewUpdates);
+
       } else if (mode === 'slide') {
         const { leftNeighborId, rightNeighborId } = stateRef.current;
         const storeItem = getItemFromStore();
@@ -206,7 +300,29 @@ export function useTimelineSlipSlide(
           }
         }
 
-        const clamped = clampSlideDelta(deltaFrames, leftNeighborId, rightNeighborId);
+        const allItems = useTimelineStore.getState().items;
+        const sourceClamped = clampSlideDelta(deltaFrames, leftNeighborId, rightNeighborId);
+        const transitionClamped = clampSlideDeltaToPreserveTransitions(
+          storeItem,
+          sourceClamped,
+          leftNeighborId ? (allItems.find((candidate) => candidate.id === leftNeighborId) ?? null) : null,
+          rightNeighborId ? (allItems.find((candidate) => candidate.id === rightNeighborId) ?? null) : null,
+          allItems,
+          useTransitionsStore.getState().transitions,
+          fps,
+        );
+        const clamped = transitionClamped;
+        const isConstrained = clamped !== deltaFrames;
+        const constraintEdge = !isConstrained
+          ? null
+          : deltaFrames > clamped
+          ? 'end'
+          : 'start';
+        const constraintLabel = !isConstrained
+          ? null
+          : sourceClamped !== deltaFrames
+          ? (storeItem.from + deltaFrames < 0 ? 'timeline start' : 'neighbor limit')
+          : 'transition limit';
 
         // Update preview store
         const previewStore = useSlideEditPreviewStore.getState();
@@ -227,10 +343,49 @@ export function useTimelineSlipSlide(
           previewStore.setSlideDelta(clamped);
         }
 
-        if (clamped !== latestDeltaRef.current) {
+        if (
+          clamped !== latestDeltaRef.current
+          || isConstrained !== stateRef.current.isConstrained
+          || constraintEdge !== stateRef.current.constraintEdge
+          || constraintLabel !== stateRef.current.constraintLabel
+        ) {
           latestDeltaRef.current = clamped;
-          setState((prev) => ({ ...prev, currentDelta: clamped }));
+          setState((prev) => ({
+            ...prev,
+            currentDelta: clamped,
+            isConstrained,
+            constraintEdge,
+            constraintLabel,
+          }));
         }
+
+        const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled;
+        const synchronizedCounterpart = linkedSelectionEnabled
+          ? getSynchronizedLinkedItems(allItems, storeItem.id)
+            .find((candidate) => candidate.id !== storeItem.id) ?? null
+          : null;
+        const linkedPreviewUpdates: PreviewItemUpdate[] = [];
+
+        if (synchronizedCounterpart) {
+          linkedPreviewUpdates.push(applyMovePreview(synchronizedCounterpart, clamped));
+
+          const leftCounterpart = leftNeighborId
+            ? getMatchingSynchronizedLinkedCounterpart(allItems, leftNeighborId, synchronizedCounterpart.trackId, synchronizedCounterpart.type)
+            : null;
+          const rightCounterpart = rightNeighborId
+            ? getMatchingSynchronizedLinkedCounterpart(allItems, rightNeighborId, synchronizedCounterpart.trackId, synchronizedCounterpart.type)
+            : null;
+
+          if (leftCounterpart) {
+            linkedPreviewUpdates.push(applyTrimEndPreview(leftCounterpart, clamped, fps));
+          }
+          if (rightCounterpart) {
+            linkedPreviewUpdates.push(applyTrimStartPreview(rightCounterpart, clamped, fps));
+          }
+        }
+
+        useLinkedEditPreviewStore.getState().setUpdates(linkedPreviewUpdates);
+
       }
     },
     [pixelsToTime, fps, trackLocked, item.id, getItemFromStore, clampSlipDelta, clampSlideDelta, snapEnabled, getMagneticSnapTargets, snapThresholdFrames],
@@ -255,6 +410,7 @@ export function useTimelineSlipSlide(
       // Clear preview stores
       useSlipEditPreviewStore.getState().clearPreview();
       useSlideEditPreviewStore.getState().clearPreview();
+      useLinkedEditPreviewStore.getState().clear();
 
       // Clear drag state
       setDragState(null);
@@ -266,6 +422,9 @@ export function useTimelineSlipSlide(
         currentDelta: 0,
         leftNeighborId: null,
         rightNeighborId: null,
+        isConstrained: false,
+        constraintEdge: null,
+        constraintLabel: null,
       });
       latestDeltaRef.current = 0;
     }
@@ -284,6 +443,7 @@ export function useTimelineSlipSlide(
         if (stateRef.current.isActive) {
           useSlipEditPreviewStore.getState().clearPreview();
           useSlideEditPreviewStore.getState().clearPreview();
+          useLinkedEditPreviewStore.getState().clear();
           setDragState(null);
           latestDeltaRef.current = 0;
         }
@@ -291,42 +451,62 @@ export function useTimelineSlipSlide(
     }
   }, [state.isActive, handleMouseMove, handleMouseUp, setDragState]);
 
+  useEffect(() => () => {
+    pendingStartCleanupRef.current?.();
+  }, []);
+
   // Start slip/slide drag
   const handleSlipSlideStart = useCallback(
-    (e: React.MouseEvent, mode: 'slip' | 'slide') => {
+    (e: React.MouseEvent, mode: 'slip' | 'slide', options?: SlipSlideStartOptions) => {
       if (e.button !== 0) return;
       if (trackLocked) return;
-      if (item.type !== 'video' && item.type !== 'audio') return;
+      if (!isMediaItem(item)) return;
 
       e.stopPropagation();
+      pendingStartCleanupRef.current?.();
+
+      if (options?.activateOnMoveThreshold) {
+        const startX = e.clientX;
+        const startY = e.clientY;
+
+        const cleanupPendingStart = () => {
+          window.removeEventListener('mousemove', checkPendingStart);
+          window.removeEventListener('mouseup', cancelPendingStart);
+          pendingStartCleanupRef.current = null;
+        };
+
+        const checkPendingStart = (moveEvent: MouseEvent) => {
+          if (!hasExceededDragThreshold(startX, startY, moveEvent.clientX, moveEvent.clientY, DRAG_THRESHOLD_PIXELS)) {
+            return;
+          }
+
+          cleanupPendingStart();
+          beginSlipSlideGesture(startX, mode);
+        };
+
+        const cancelPendingStart = () => {
+          cleanupPendingStart();
+        };
+
+        pendingStartCleanupRef.current = cleanupPendingStart;
+        window.addEventListener('mousemove', checkPendingStart);
+        window.addEventListener('mouseup', cancelPendingStart);
+        return;
+      }
+
       e.preventDefault();
-
-      const { leftNeighbor, rightNeighbor } = findNeighbors();
-
-      // Signal drag start so other components can detect active drag
-      setDragState({
-        isDragging: true,
-        draggedItemIds: [item.id],
-        offset: { x: 0, y: 0 },
-      });
-
-      setState({
-        isActive: true,
-        mode,
-        startX: e.clientX,
-        currentDelta: 0,
-        leftNeighborId: leftNeighbor?.id ?? null,
-        rightNeighborId: rightNeighbor?.id ?? null,
-      });
-      latestDeltaRef.current = 0;
+      beginSlipSlideGesture(e.clientX, mode);
     },
-    [item.id, item.type, trackLocked, findNeighbors, setDragState],
+    [beginSlipSlideGesture, item, trackLocked],
   );
 
   return {
     isSlipSlideActive: state.isActive,
     slipSlideMode: state.mode,
     slipSlideDelta: state.currentDelta,
+    slipSlideConstrained: state.isConstrained,
+    slipSlideConstraintEdge: state.constraintEdge,
+    slipSlideConstraintLabel: state.constraintLabel,
     handleSlipSlideStart,
   };
 }

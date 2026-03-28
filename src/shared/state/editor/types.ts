@@ -4,12 +4,16 @@ export interface EditorState {
   activePanel: 'media' | 'effects' | 'properties' | null;
   leftSidebarOpen: boolean;
   rightSidebarOpen: boolean;
+  keyframeEditorOpen: boolean;
   activeTab: 'media' | 'text' | 'shapes' | 'effects' | 'transitions';
   clipInspectorTab: ClipInspectorTab;
   sidebarWidth: number;
   rightSidebarWidth: number;
   timelineHeight: number;
   sourcePreviewMediaId: string | null;
+  sourcePatchVideoEnabled: boolean;
+  sourcePatchAudioEnabled: boolean;
+  linkedSelectionEnabled: boolean;
   colorScopesOpen: boolean;
 }
 
@@ -17,19 +21,30 @@ export interface EditorActions {
   setActivePanel: (panel: 'media' | 'effects' | 'properties' | null) => void;
   setLeftSidebarOpen: (open: boolean) => void;
   setRightSidebarOpen: (open: boolean) => void;
+  setKeyframeEditorOpen: (open: boolean) => void;
   toggleLeftSidebar: () => void;
   toggleRightSidebar: () => void;
+  toggleKeyframeEditorOpen: () => void;
   setActiveTab: (tab: 'media' | 'text' | 'shapes' | 'effects' | 'transitions') => void;
   setClipInspectorTab: (tab: ClipInspectorTab) => void;
   setSidebarWidth: (width: number) => void;
   setRightSidebarWidth: (width: number) => void;
   syncSidebarLayout: (layout: {
-    sidebarDefaultWidth: number;
-    sidebarMinWidth: number;
-    sidebarMaxWidth: number;
+    leftSidebarDefaultWidth: number;
+    leftSidebarMinWidth: number;
+    leftSidebarMaxWidth: number;
+    rightSidebarDefaultWidth: number;
+    rightSidebarMinWidth: number;
+    rightSidebarMaxWidth: number;
   }) => void;
   setTimelineHeight: (height: number) => void;
   setSourcePreviewMediaId: (mediaId: string | null) => void;
+  setSourcePatchVideoEnabled: (enabled: boolean) => void;
+  setSourcePatchAudioEnabled: (enabled: boolean) => void;
+  toggleSourcePatchVideoEnabled: () => void;
+  toggleSourcePatchAudioEnabled: () => void;
+  setLinkedSelectionEnabled: (enabled: boolean) => void;
+  toggleLinkedSelectionEnabled: () => void;
   setColorScopesOpen: (open: boolean) => void;
   toggleColorScopesOpen: () => void;
 }

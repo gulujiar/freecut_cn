@@ -152,6 +152,7 @@ export function useClipboardShortcuts() {
         const storeItems = useTimelineStore.getState().items;
         const newItemIds: string[] = [];
         const usedTrackIds = new Set<string>();
+        const linkedGroupMap = new Map<string, string>();
 
         // Filter out composition items when pasting inside a sub-composition (1-level nesting limit)
         const isInsideSubComp = useCompositionNavigationStore.getState().activeCompositionId !== null;
@@ -225,6 +226,10 @@ export function useClipboardShortcuts() {
             from: newFrom,
             trackId: targetTrackId,
             originId: newId,
+            linkedGroupId: itemData.linkedGroupId
+              ? (linkedGroupMap.get(itemData.linkedGroupId)
+                ?? linkedGroupMap.set(itemData.linkedGroupId, crypto.randomUUID()).get(itemData.linkedGroupId))
+              : undefined,
           };
 
           addItem(newItem as Parameters<typeof addItem>[0]);

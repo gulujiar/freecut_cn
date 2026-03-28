@@ -15,6 +15,11 @@ interface TrimHandlesProps {
   trimHandle: 'start' | 'end' | null;
   activeTool: string;
   hoveredEdge: 'start' | 'end' | null;
+  trimConstrained: boolean;
+  startCursorClass: string;
+  endCursorClass: string;
+  startTone: 'default' | 'ripple';
+  endTone: 'default' | 'ripple';
   hasJoinableLeft: boolean;
   hasJoinableRight: boolean;
   onTrimStart: (e: React.MouseEvent, handle: 'start' | 'end') => void;
@@ -33,6 +38,11 @@ export const TrimHandles = memo(function TrimHandles({
   trimHandle,
   activeTool,
   hoveredEdge,
+  trimConstrained,
+  startCursorClass,
+  endCursorClass,
+  startTone,
+  endTone,
   hasJoinableLeft,
   hasJoinableRight,
   onTrimStart,
@@ -41,26 +51,34 @@ export const TrimHandles = memo(function TrimHandles({
 }: TrimHandlesProps) {
   const showLeftHandle = !trackLocked &&
     (!isAnyDragActive || isTrimming) &&
-    (activeTool === 'select' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit') &&
+    (activeTool === 'select' || activeTool === 'trim-edit') &&
     (hoveredEdge === 'start' || (isTrimming && trimHandle === 'start'));
 
   const showRightHandle = !trackLocked &&
     (!isAnyDragActive || isTrimming) &&
-    (activeTool === 'select' || activeTool === 'rolling-edit' || activeTool === 'ripple-edit') &&
+    (activeTool === 'select' || activeTool === 'trim-edit') &&
     (hoveredEdge === 'end' || (isTrimming && trimHandle === 'end'));
 
   return (
     <>
-      {/* Left trim handle with context menu for join - w-2 (8px) matches EDGE_HOVER_ZONE */}
+      {/* Left trim handle: wider hit area, thin visible indicator */}
       <ContextMenu>
         <ContextMenuTrigger asChild disabled={trackLocked || !hasJoinableLeft}>
           <div
             className={cn(
-              "absolute left-0 top-0 bottom-0 w-2 bg-primary cursor-ew-resize transition-opacity duration-75",
-              showLeftHandle ? "opacity-100" : "opacity-0 pointer-events-none"
+              'absolute left-0 top-0 bottom-0 w-3 transition-opacity duration-75',
+              startCursorClass,
+              showLeftHandle ? 'opacity-100' : 'opacity-0 pointer-events-none'
             )}
             onMouseDown={(e) => onTrimStart(e, 'start')}
-          />
+          >
+            <div className={cn(
+              'absolute inset-y-0 left-0 w-px rounded-l-sm bg-primary/80 shadow-[0_0_0_1px_rgba(255,255,255,0.12)]',
+              isTrimming && trimHandle === 'start' && 'opacity-0',
+              startTone === 'ripple' && 'bg-amber-300/95 shadow-[0_0_0_1px_rgba(253,224,71,0.34),0_0_12px_rgba(251,191,36,0.3)]',
+              trimConstrained && trimHandle === 'start' && 'bg-red-300/95 shadow-[0_0_0_1px_rgba(252,165,165,0.35)]'
+            )} />
+          </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={onJoinLeft}>
@@ -70,16 +88,24 @@ export const TrimHandles = memo(function TrimHandles({
         </ContextMenuContent>
       </ContextMenu>
 
-      {/* Right trim handle with context menu for join - w-2 (8px) matches EDGE_HOVER_ZONE */}
+      {/* Right trim handle: wider hit area, thin visible indicator */}
       <ContextMenu>
         <ContextMenuTrigger asChild disabled={trackLocked || !hasJoinableRight}>
           <div
             className={cn(
-              "absolute right-0 top-0 bottom-0 w-2 bg-primary cursor-ew-resize transition-opacity duration-75",
-              showRightHandle ? "opacity-100" : "opacity-0 pointer-events-none"
+              'absolute right-0 top-0 bottom-0 w-3 transition-opacity duration-75',
+              endCursorClass,
+              showRightHandle ? 'opacity-100' : 'opacity-0 pointer-events-none'
             )}
             onMouseDown={(e) => onTrimStart(e, 'end')}
-          />
+          >
+            <div className={cn(
+              'absolute inset-y-0 right-0 w-px rounded-r-sm bg-primary/80 shadow-[0_0_0_1px_rgba(255,255,255,0.12)]',
+              isTrimming && trimHandle === 'end' && 'opacity-0',
+              endTone === 'ripple' && 'bg-amber-300/95 shadow-[0_0_0_1px_rgba(253,224,71,0.34),0_0_12px_rgba(251,191,36,0.3)]',
+              trimConstrained && trimHandle === 'end' && 'bg-red-300/95 shadow-[0_0_0_1px_rgba(252,165,165,0.35)]'
+            )} />
+          </div>
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={onJoinRight}>
@@ -91,4 +117,3 @@ export const TrimHandles = memo(function TrimHandles({
     </>
   );
 });
-

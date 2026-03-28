@@ -4,4 +4,4 @@
  */
 
 export type { TimelineState, TimelineActions } from './timeline-contract';
-export { useTimelineStore } from './timeline-contract';
+export { useTimelineStore, useItemsStore, useKeyframesStore } from './timeline-contract';

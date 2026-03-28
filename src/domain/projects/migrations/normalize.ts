@@ -26,6 +26,10 @@ function normalizeTrack(
   track: ProjectTimeline['tracks'][number],
   index: number
 ): ProjectTimeline['tracks'][number] {
+  const normalizedVolume = track.volume;
+  const normalizedKind = track.kind === 'video' || track.kind === 'audio'
+    ? track.kind
+    : undefined;
   return {
     ...track,
     // Always use current default — no user-facing track resize exists yet
@@ -35,6 +39,10 @@ function normalizeTrack(
     visible: track.visible ?? true,
     muted: track.muted ?? false,
     solo: track.solo ?? false,
+    volume: normalizedVolume === undefined
+      ? 0
+      : Math.max(-60, Math.min(12, normalizedVolume)),
+    kind: normalizedKind,
     // Ensure order is set (fallback to index if missing)
     order: track.order ?? index,
   };
@@ -126,17 +134,36 @@ function normalizeTransition(
     ...transition,
     // Ensure duration is at least 1 frame
     durationInFrames: Math.max(1, Math.round(transition.durationInFrames)),
+    timing: transition.timing ?? 'linear',
   };
+}
+
+function flattenTrackGroups(
+  tracks: ProjectTimeline['tracks']
+): ProjectTimeline['tracks'] {
+  return tracks
+    .filter((track) => !track.isGroup)
+    .map((track) => ({
+      ...track,
+      parentTrackId: undefined,
+      isGroup: undefined,
+      isCollapsed: undefined,
+    }))
+    .sort((a, b) => a.order - b.order);
 }
 
 /**
  * Normalize a timeline to ensure all data conforms to current defaults.
  */
 function normalizeTimeline(timeline: ProjectTimeline): ProjectTimeline {
+  const normalizedTracks = flattenTrackGroups(
+    timeline.tracks.map((track, index) => normalizeTrack(track, index))
+  );
+
   return {
     ...timeline,
     // Normalize tracks
-    tracks: timeline.tracks.map((track, index) => normalizeTrack(track, index)),
+    tracks: normalizedTracks,
     // Normalize items
     items: timeline.items.map(normalizeItem),
     // Normalize transitions if present
@@ -144,7 +171,7 @@ function normalizeTimeline(timeline: ProjectTimeline): ProjectTimeline {
     // Normalize sub-composition tracks and items
     compositions: timeline.compositions?.map((comp) => ({
       ...comp,
-      tracks: comp.tracks.map((track, index) => normalizeTrack(track, index)),
+      tracks: flattenTrackGroups(comp.tracks.map((track, index) => normalizeTrack(track, index))),
       items: comp.items.map(normalizeItem),
       transitions: comp.transitions?.map(normalizeTransition),
     })),

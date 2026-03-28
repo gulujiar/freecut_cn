@@ -16,3 +16,4 @@ export {
 export { expandTextTransformToFitContent } from '@/features/composition-runtime/utils/text-layout';
 export { getBestDomVideoElementForItem } from '@/features/composition-runtime/utils/dom-video-element-registry';
 export { getVideoTargetTimeSeconds } from '@/features/composition-runtime/utils/video-timing';
+export { transitionSafePlay, muteTransitionElement, unmuteTransitionElement } from '@/features/composition-runtime/components/video-audio-context';

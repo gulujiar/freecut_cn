@@ -1,9 +1,9 @@
 import { create } from 'zustand';
 import type { EditorState, EditorActions } from './types';
 import {
-  clampEditorSidebarWidth,
   EDITOR_LAYOUT,
-  type EditorLayout,
+  getLeftEditorSidebarBounds,
+  getRightEditorSidebarBounds,
 } from '@/shared/ui/editor-layout';
 
 const LEGACY_SIDEBAR_DEFAULT_WIDTH = 320;
@@ -11,7 +11,7 @@ const LEGACY_SIDEBAR_DEFAULT_WIDTH = 320;
 function normalizeSidebarWidth(
   width: number,
   fallback: number,
-  layout: Pick<EditorLayout, 'sidebarMinWidth' | 'sidebarMaxWidth'>
+  bounds: { minWidth: number; maxWidth: number }
 ): number {
   if (!Number.isFinite(width)) return fallback;
   const nextWidth = (
@@ -20,7 +20,7 @@ function normalizeSidebarWidth(
   )
     ? fallback
     : width;
-  return clampEditorSidebarWidth(nextWidth, layout);
+  return Math.min(bounds.maxWidth, Math.max(bounds.minWidth, nextWidth));
 }
 
 function loadSidebarWidth(key: string, fallback: number): number {
@@ -39,20 +39,35 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   activePanel: null,
   leftSidebarOpen: true,
   rightSidebarOpen: true,
+  keyframeEditorOpen: false,
   activeTab: 'media',
   clipInspectorTab: 'transform',
-  sidebarWidth: loadSidebarWidth('editor:sidebarWidth', EDITOR_LAYOUT.sidebarDefaultWidth),
-  rightSidebarWidth: loadSidebarWidth('editor:rightSidebarWidth', EDITOR_LAYOUT.sidebarDefaultWidth),
+  sidebarWidth: loadSidebarWidth('editor:sidebarWidth', EDITOR_LAYOUT.leftSidebarDefaultWidth),
+  rightSidebarWidth: loadSidebarWidth('editor:rightSidebarWidth', EDITOR_LAYOUT.rightSidebarDefaultWidth),
   timelineHeight: 250,
   sourcePreviewMediaId: null,
+  sourcePatchVideoEnabled: true,
+  sourcePatchAudioEnabled: true,
+  linkedSelectionEnabled: true,
   colorScopesOpen: false,
 
   // Actions
   setActivePanel: (panel) => set({ activePanel: panel }),
   setLeftSidebarOpen: (open) => set({ leftSidebarOpen: open }),
   setRightSidebarOpen: (open) => set({ rightSidebarOpen: open }),
+  setKeyframeEditorOpen: (open) => set((state) => ({
+    keyframeEditorOpen: open,
+    leftSidebarOpen: open ? true : state.leftSidebarOpen,
+  })),
   toggleLeftSidebar: () => set((state) => ({ leftSidebarOpen: !state.leftSidebarOpen })),
   toggleRightSidebar: () => set((state) => ({ rightSidebarOpen: !state.rightSidebarOpen })),
+  toggleKeyframeEditorOpen: () => set((state) => {
+    const nextOpen = !state.keyframeEditorOpen;
+    return {
+      keyframeEditorOpen: nextOpen,
+      leftSidebarOpen: nextOpen ? true : state.leftSidebarOpen,
+    };
+  }),
   setActiveTab: (tab) => set({ activeTab: tab }),
   setClipInspectorTab: (tab) => set({ clipInspectorTab: tab }),
   setSidebarWidth: (width) => {
@@ -66,17 +81,23 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   syncSidebarLayout: (layout) => set((currentState) => ({
     sidebarWidth: normalizeSidebarWidth(
       currentState.sidebarWidth,
-      layout.sidebarDefaultWidth,
-      layout
+      layout.leftSidebarDefaultWidth,
+      getLeftEditorSidebarBounds(layout)
     ),
     rightSidebarWidth: normalizeSidebarWidth(
       currentState.rightSidebarWidth,
-      layout.sidebarDefaultWidth,
-      layout
+      layout.rightSidebarDefaultWidth,
+      getRightEditorSidebarBounds(layout)
     ),
   })),
   setTimelineHeight: (height) => set({ timelineHeight: height }),
   setSourcePreviewMediaId: (mediaId) => set({ sourcePreviewMediaId: mediaId }),
+  setSourcePatchVideoEnabled: (enabled) => set({ sourcePatchVideoEnabled: enabled }),
+  setSourcePatchAudioEnabled: (enabled) => set({ sourcePatchAudioEnabled: enabled }),
+  toggleSourcePatchVideoEnabled: () => set((state) => ({ sourcePatchVideoEnabled: !state.sourcePatchVideoEnabled })),
+  toggleSourcePatchAudioEnabled: () => set((state) => ({ sourcePatchAudioEnabled: !state.sourcePatchAudioEnabled })),
+  setLinkedSelectionEnabled: (enabled) => set({ linkedSelectionEnabled: enabled }),
+  toggleLinkedSelectionEnabled: () => set((state) => ({ linkedSelectionEnabled: !state.linkedSelectionEnabled })),
   setColorScopesOpen: (open) => set({ colorScopesOpen: open }),
   toggleColorScopesOpen: () => set((state) => ({ colorScopesOpen: !state.colorScopesOpen })),
 }));

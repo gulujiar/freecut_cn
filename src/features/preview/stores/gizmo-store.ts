@@ -12,6 +12,10 @@ export interface ItemPropertiesPreview {
   volume?: number;
   audioFadeIn?: number;
   audioFadeOut?: number;
+  audioFadeInCurve?: number;
+  audioFadeOutCurve?: number;
+  audioFadeInCurveX?: number;
+  audioFadeOutCurveX?: number;
   // Text properties
   fontSize?: number;
   letterSpacing?: number;

@@ -12,6 +12,8 @@ export {
   resolveItemTransformAtFrame,
   resolveActiveShapeMasksAtFrame,
   resolveFrameCompositionScene,
+  resolveFrameCompositionSceneCached,
+  invalidateFrameSceneCache,
 } from '@/features/composition-runtime/utils/frame-scene';
 export {
   applyPreviewPathVerticesToItem,

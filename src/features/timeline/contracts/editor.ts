@@ -8,12 +8,23 @@ import { waveformCache } from '../services/waveform-cache';
 
 export type { TimelineState, TimelineActions } from '../types';
 export { useTimelineStore } from '../stores/timeline-store';
+export { useItemsStore } from '../stores/items-store';
+export { useKeyframesStore } from '../stores/keyframes-store';
 export { Timeline } from '../components/timeline';
 export { BentoLayoutDialog } from '../components/bento-layout-dialog';
+export { KeyframeGraphPanel } from '../components/keyframe-graph-panel';
 export { useTimelineShortcuts } from '../hooks/use-timeline-shortcuts';
 export { useTransitionBreakageNotifications } from '../hooks/use-transition-breakage-notifications';
 export { findNearestAvailableSpace } from '../utils/collision-utils';
-export { areFramesAligned } from '../utils/transition-utils';
+export { areFramesAligned, getMaxTransitionDurationForHandles } from '../utils/transition-utils';
+export { resolveTransitionTargetFromSelection } from '../utils/transition-targets';
+export {
+  createDefaultAdjustmentItem,
+  createDefaultShapeItem,
+  createDefaultTextItem,
+  getDefaultGeneratedLayerDurationInFrames,
+} from '../utils/generated-layer-items';
+export { findCompatibleTrackForItemType } from '../utils/track-item-compatibility';
 export {
   timelineToSourceFrames,
   sourceToTimelineFrames,

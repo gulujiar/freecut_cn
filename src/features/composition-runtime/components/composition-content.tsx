@@ -1,6 +1,6 @@
 ﻿import React, { useMemo, useCallback } from 'react';
 import { AbsoluteFill, Sequence, useSequenceContext } from '@/features/composition-runtime/deps/player';
-import type { CompositionItem as CompositionItemType, TimelineItem, ShapeItem } from '@/types/timeline';
+import type { AudioItem, CompositionItem as CompositionItemType, TimelineItem, ShapeItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import { useCompositionsStore } from '@/features/composition-runtime/deps/stores';
 import { blobUrlManager, useBlobUrlVersion } from '@/infrastructure/browser/blob-url-manager';
@@ -8,6 +8,7 @@ import { VideoConfigProvider } from '@/features/composition-runtime/deps/player'
 import { useVideoConfig } from '../hooks/use-player-compat';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
+import { sourceToTimelineFrames, timelineToSourceFrames } from '@/features/composition-runtime/deps/timeline';
 import { resolveTransform, getSourceDimensions } from '../utils/transform-resolver';
 import { resolveAnimatedTransform, hasKeyframeAnimation } from '@/features/composition-runtime/deps/keyframes';
 import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
@@ -25,11 +26,18 @@ import {
 import {
   resolveTrackRenderState,
 } from '../utils/scene-assembly';
+import { getLinkedVideoIdsWithAudio, hasLinkedAudioCompanion } from '@/shared/utils/linked-media';
+
+type CompositionWrapperItem = CompositionItemType | (AudioItem & { compositionId: string });
 
 interface CompositionContentProps {
-  item: CompositionItemType;
+  item: CompositionWrapperItem;
   parentMuted?: boolean;
   renderDepth?: number;
+  renderMode?: 'full' | 'visual-only' | 'audio-only';
+  audioGainMultiplier?: number;
+  crossfadeFadeInFrames?: number;
+  crossfadeFadeOutFrames?: number;
 }
 
 /**
@@ -50,6 +58,57 @@ function resolveSubCompItem(subItem: TimelineItem): TimelineItem {
   return subItem;
 }
 
+function mapSubCompItemToWrapperWindow(params: {
+  subItem: TimelineItem;
+  wrapper: CompositionWrapperItem;
+  parentFps: number;
+  subCompFps: number;
+}): TimelineItem | null {
+  const { subItem, wrapper, parentFps, subCompFps } = params;
+  const wrapperSpeed = wrapper.speed ?? 1;
+  const wrapperSourceFps = wrapper.sourceFps ?? subCompFps;
+  const wrapperSourceStart = wrapper.sourceStart ?? wrapper.trimStart ?? 0;
+  const wrapperSourceEnd = wrapper.sourceEnd
+    ?? (wrapperSourceStart + timelineToSourceFrames(wrapper.durationInFrames, wrapperSpeed, parentFps, wrapperSourceFps));
+  const subItemStart = subItem.from;
+  const subItemEnd = subItem.from + subItem.durationInFrames;
+  const overlapStart = Math.max(subItemStart, wrapperSourceStart);
+  const overlapEnd = Math.min(subItemEnd, wrapperSourceEnd);
+
+  if (overlapEnd <= overlapStart) {
+    return null;
+  }
+
+  const mappedFrom = sourceToTimelineFrames(overlapStart - wrapperSourceStart, wrapperSpeed, wrapperSourceFps, parentFps);
+  const mappedEnd = sourceToTimelineFrames(overlapEnd - wrapperSourceStart, wrapperSpeed, wrapperSourceFps, parentFps);
+  const mappedDuration = Math.max(1, mappedEnd - mappedFrom);
+  const effectiveSpeed = (subItem.speed ?? 1) * wrapperSpeed;
+  const clippedStartFrames = overlapStart - subItemStart;
+  const clippedEndFrames = subItemEnd - overlapEnd;
+
+  const mappedItem: TimelineItem = {
+    ...subItem,
+    from: mappedFrom,
+    durationInFrames: mappedDuration,
+    speed: effectiveSpeed,
+  };
+
+  if (subItem.type === 'video' || subItem.type === 'audio' || subItem.type === 'composition') {
+    const childSourceFps = subItem.sourceFps ?? subCompFps;
+    const childSpeed = subItem.speed ?? 1;
+    const sourceStartDelta = timelineToSourceFrames(clippedStartFrames, childSpeed, subCompFps, childSourceFps);
+    const sourceEndDelta = timelineToSourceFrames(clippedEndFrames, childSpeed, subCompFps, childSourceFps);
+    const nextSourceStart = (subItem.sourceStart ?? 0) + sourceStartDelta;
+
+    mappedItem.sourceStart = nextSourceStart;
+    if (subItem.sourceEnd !== undefined) {
+      mappedItem.sourceEnd = Math.max(nextSourceStart + 1, subItem.sourceEnd - sourceEndDelta);
+    }
+  }
+
+  return mappedItem;
+}
+
 /**
  * Renders the contents of a sub-composition inline within the main preview.
  *
@@ -61,7 +120,7 @@ function resolveSubCompItem(subItem: TimelineItem): TimelineItem {
  * then CSS-scaled to fit the parent container dimensions. This ensures sub-items
  * use the correct coordinate space (sub-comp dimensions, not main canvas).
  */
-export const CompositionContent = React.memo<CompositionContentProps>(({ item, parentMuted = false, renderDepth = 0 }) => {
+export const CompositionContent = React.memo<CompositionContentProps>(({ item, parentMuted = false, renderDepth = 0, renderMode = 'full', audioGainMultiplier = 1, crossfadeFadeInFrames, crossfadeFadeOutFrames }) => {
   const subComp = useCompositionsStore((s) => s.compositions.find((c) => c.id === item.compositionId));
   const { width: renderWidth, height: renderHeight, fps: mainFps } = useVideoConfig();
   const compositionSpace = useCompositionSpace();
@@ -76,8 +135,18 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
   // Resolve media URLs for sub-comp items so they can render in preview
   const resolvedItems = useMemo(() => {
     if (!subComp) return [];
-    return subComp.items.map(resolveSubCompItem);
-  }, [subComp, blobUrlVersion]);
+    return subComp.items
+      .map(resolveSubCompItem)
+      .flatMap((subItem) => {
+        const mapped = mapSubCompItemToWrapperWindow({
+          subItem,
+          wrapper: item,
+          parentFps: mainFps,
+          subCompFps: subComp.fps,
+        });
+        return mapped ? [mapped] : [];
+      });
+  }, [blobUrlVersion, item, mainFps, subComp]);
 
   // === Compute parent container dimensions ===
   // Replicates the same priority chain as useItemVisualState:
@@ -112,7 +181,12 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
   const frame = sequenceContext?.localFrame ?? 0;
   const relativeFrame = frame - ((item as TimelineItem & { _sequenceFrameOffset?: number })._sequenceFrameOffset ?? 0);
   const sourceOffset = item.sourceStart ?? item.trimStart ?? 0;
-  const subCompFrame = relativeFrame + sourceOffset;
+  const subCompFrame = sourceOffset + timelineToSourceFrames(
+    relativeFrame,
+    item.speed ?? 1,
+    mainFps,
+    item.sourceFps ?? subComp?.fps ?? mainFps,
+  );
 
   // Only include relativeFrame as a dependency when keyframes are actually animated.
   // This prevents per-frame recomputation during playback for non-animated sub-comps.
@@ -169,6 +243,23 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     [subComp]
   );
   const sortedTracks = trackRenderState?.visibleTracksByOrderDesc ?? [];
+  const linkedVideoIdsWithOwnedAudio = useMemo(
+    () => getLinkedVideoIdsWithAudio(resolvedItems),
+    [resolvedItems]
+  );
+
+  let wrapperFadeMultiplier = 1;
+  const hasCrossfadeIn = (crossfadeFadeInFrames ?? 0) > 0;
+  const hasCrossfadeOut = (crossfadeFadeOutFrames ?? 0) > 0;
+  if (hasCrossfadeIn && frame < (crossfadeFadeInFrames ?? 0)) {
+    const progress = frame / Math.max(1, crossfadeFadeInFrames ?? 1);
+    wrapperFadeMultiplier = Math.sin(progress * Math.PI / 2);
+  } else if (hasCrossfadeOut && frame >= item.durationInFrames - (crossfadeFadeOutFrames ?? 0)) {
+    const fadeOutStart = item.durationInFrames - (crossfadeFadeOutFrames ?? 0);
+    const progress = (frame - fadeOutStart) / Math.max(1, crossfadeFadeOutFrames ?? 1);
+    wrapperFadeMultiplier = Math.cos(progress * Math.PI / 2);
+  }
+  const effectiveAudioGainMultiplier = audioGainMultiplier * Math.max(0, wrapperFadeMultiplier);
   const previousMaskInfosRef = React.useRef<MaskInfo[]>(EMPTY_MASK_INFOS);
 
   // Resolve active sub-comp masks for the current local frame.
@@ -256,6 +347,8 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
                   i.trackId === track.id
                   // Mask shapes are control items and should not render visually.
                   && !(i.type === 'shape' && i.isMask)
+                  && (renderMode !== 'visual-only' || i.type !== 'audio')
+                  && (renderMode !== 'audio-only' || i.type === 'audio')
                 ));
                 const trackOrder = track.order ?? 0;
 
@@ -267,9 +360,11 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
                   >
                     <Item
                       item={subItem}
-                      muted={parentMuted || track.muted}
+                      muted={parentMuted || track.muted || linkedVideoIdsWithOwnedAudio.has(subItem.id)}
                       masks={getMasksForTrackOrder(activeMaskInfos, trackOrder)}
                       renderDepth={renderDepth}
+                      compositionRenderMode={subItem.type === 'composition' && hasLinkedAudioCompanion(resolvedItems, subItem) ? 'visual-only' : 'full'}
+                      audioGainMultiplier={effectiveAudioGainMultiplier}
                     />
                   </Sequence>
                 ));

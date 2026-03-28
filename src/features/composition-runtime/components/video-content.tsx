@@ -804,7 +804,12 @@ export const VideoContent: React.FC<{
   sourceFps: number;
   forceCssComposite?: boolean;
 }> = ({ item, muted, safeTrimBefore, playbackRate, sourceFps, forceCssComposite = false }) => {
-  const audioVolume = useVideoAudioVolume(item, muted);
+  const baseAudioVolume = useVideoAudioVolume(item, muted);
+  // During transition overlaps, the composition's audio crossfade system
+  // (CustomDecoderAudio) handles audio mixing. Mute the DOM video element
+  // to prevent doubling — one audio stream from the element and another
+  // from the crossfade renderer.
+  const audioVolume = item._sharedTransitionSync ? 0 : baseAudioVolume;
   const [hasError, setHasError] = useState(false);
 
   // NativePreviewVideo mounts pooled <video> into this container.

@@ -5,7 +5,6 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from '@/components/ui/resizable';
-import type { ImperativePanelHandle } from 'react-resizable-panels';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toolbar } from './toolbar';
 import { MediaSidebar } from './media-sidebar';
@@ -81,10 +80,6 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
 
   // Guard against concurrent saves (e.g., spamming Ctrl+S)
   const isSavingRef = useRef(false);
-
-  // Refs for imperative panel resizing
-  const timelinePanelRef = useRef<ImperativePanelHandle>(null);
-  const baseTimelineSizeRef = useRef(30); // Store the user's base timeline size
 
   // Initialize transition chain subscription (pre-computes chains from timeline data)
   // This subscription recomputes chains when items/transitions change â€” deferred to idle
@@ -250,33 +245,6 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
 
   const timelineDuration = 30;
 
-  // Track whether graph panel is currently open to avoid storing expanded size as base
-  const isGraphOpenRef = useRef(false);
-
-  // Handle graph panel open/close - resize timeline panel accordingly
-  // Note: Resizing the graph panel via drag handle does NOT affect the overall timeline panel size.
-  // Only opening/closing the graph panel changes the timeline panel size.
-  const handleGraphPanelOpenChange = useCallback((isOpen: boolean) => {
-    const panel = timelinePanelRef.current;
-    if (!panel) return;
-
-    if (isOpen && !isGraphOpenRef.current) {
-      // Opening: store current size before expanding (only if not already open)
-      baseTimelineSizeRef.current = panel.getSize();
-      // Expand panel to accommodate graph editor
-      const newSize = Math.min(
-        editorLayout.timelineMaxSize,
-        baseTimelineSizeRef.current + editorLayout.graphPanelSizeIncrease
-      );
-      panel.resize(newSize);
-      isGraphOpenRef.current = true;
-    } else if (!isOpen && isGraphOpenRef.current) {
-      // Closing: restore to base size
-      panel.resize(baseTimelineSizeRef.current);
-      isGraphOpenRef.current = false;
-    }
-  }, [editorLayout.graphPanelSizeIncrease, editorLayout.timelineMaxSize]);
-
   return (
     <div
       className="h-screen bg-background flex flex-col overflow-hidden"
@@ -296,55 +264,54 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
           />
         </InteractionLockRegion>
 
-        {/* Resizable Layout: Main Content + Timeline */}
-        <ResizablePanelGroup direction="vertical" className="flex-1">
-          {/* Main Content Area */}
-          <ResizablePanel
-            defaultSize={100 - editorLayout.timelineDefaultSize}
-            minSize={100 - editorLayout.timelineMaxSize}
-            maxSize={100 - editorLayout.timelineMinSize}
-          >
-            <div className="h-full flex overflow-hidden relative">
-              {/* Left Sidebar - Media Library */}
-              <InteractionLockRegion locked={isMaskEditingActive}>
+        {/* Main Layout: Full-height sidebar + vertical split */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Sidebar - Media Library (full height) */}
+          <InteractionLockRegion locked={isMaskEditingActive}>
+            <ErrorBoundary level="feature">
+              <MediaSidebar />
+            </ErrorBoundary>
+          </InteractionLockRegion>
+
+          {/* Right side: Preview/Properties + Timeline */}
+          <ResizablePanelGroup direction="vertical" className="flex-1 min-w-0">
+            {/* Top - Preview + Properties */}
+            <ResizablePanel
+              defaultSize={100 - editorLayout.timelineDefaultSize}
+              minSize={100 - editorLayout.timelineMaxSize}
+              maxSize={100 - editorLayout.timelineMinSize}
+            >
+              <div className="h-full flex overflow-hidden relative">
+                {/* Center - Preview */}
                 <ErrorBoundary level="feature">
-                  <MediaSidebar />
+                  <PreviewArea project={project} />
+                </ErrorBoundary>
+
+                {/* Right Sidebar - Properties */}
+                <InteractionLockRegion locked={isMaskEditingActive}>
+                  <ErrorBoundary level="feature">
+                    <PropertiesSidebar />
+                  </ErrorBoundary>
+                </InteractionLockRegion>
+              </div>
+            </ResizablePanel>
+
+            <ResizableHandle withHandle className={isMaskEditingActive ? 'pointer-events-none opacity-60' : undefined} />
+
+            {/* Bottom - Timeline */}
+            <ResizablePanel
+              defaultSize={editorLayout.timelineDefaultSize}
+              minSize={editorLayout.timelineMinSize}
+              maxSize={editorLayout.timelineMaxSize}
+            >
+              <InteractionLockRegion locked={isMaskEditingActive} className="h-full">
+                <ErrorBoundary level="feature">
+                  <Timeline duration={timelineDuration} />
                 </ErrorBoundary>
               </InteractionLockRegion>
-
-              {/* Center - Preview */}
-              <ErrorBoundary level="feature">
-                <PreviewArea project={project} />
-              </ErrorBoundary>
-
-              {/* Right Sidebar - Properties */}
-              <InteractionLockRegion locked={isMaskEditingActive}>
-                <ErrorBoundary level="feature">
-                  <PropertiesSidebar />
-                </ErrorBoundary>
-              </InteractionLockRegion>
-            </div>
-          </ResizablePanel>
-
-          <ResizableHandle withHandle className={isMaskEditingActive ? 'pointer-events-none opacity-60' : undefined} />
-
-          {/* Bottom - Timeline */}
-          <ResizablePanel
-            ref={timelinePanelRef}
-            defaultSize={editorLayout.timelineDefaultSize}
-            minSize={editorLayout.timelineMinSize}
-            maxSize={editorLayout.timelineMaxSize}
-          >
-            <InteractionLockRegion locked={isMaskEditingActive} className="h-full">
-              <ErrorBoundary level="feature">
-                <Timeline
-                  duration={timelineDuration}
-                  onGraphPanelOpenChange={handleGraphPanelOpenChange}
-                />
-              </ErrorBoundary>
-            </InteractionLockRegion>
-          </ResizablePanel>
-        </ResizablePanelGroup>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </div>
 
       <Suspense fallback={null}>
         {/* Export Dialog */}

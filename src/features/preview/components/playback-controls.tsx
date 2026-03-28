@@ -10,6 +10,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Volume2,
+  VolumeX,
   Zap,
   Camera,
   Loader2,
@@ -101,12 +102,14 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
   // Read from store directly when needed to avoid re-renders every frame
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const volume = usePlaybackStore((s) => s.volume);
+  const muted = usePlaybackStore((s) => s.muted);
   const useProxy = usePlaybackStore((s) => s.useProxy);
   const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause);
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
   const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame);
   const setDisplayedFrame = usePlaybackStore((s) => s.setDisplayedFrame);
   const setVolume = usePlaybackStore((s) => s.setVolume);
+  const toggleMute = usePlaybackStore((s) => s.toggleMute);
   const toggleUseProxy = usePlaybackStore((s) => s.toggleUseProxy);
 
   // Note: Automatic playback loop is now handled by Composition Player
@@ -305,10 +308,11 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
           size="icon"
           className="flex-shrink-0"
           style={PREVIEW_CONTROL_BUTTON_STYLE}
-          data-tooltip="Volume"
-          aria-label="Volume"
+          onClick={toggleMute}
+          data-tooltip={muted ? 'Unmute preview' : 'Mute preview'}
+          aria-label={muted ? 'Unmute preview' : 'Mute preview'}
         >
-          <Volume2 className="w-4 h-4" />
+          {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
         </Button>
         <Slider
           value={[volume * 100]}

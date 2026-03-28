@@ -52,6 +52,19 @@ export interface MediaMetadata {
    * false for codecs like EC-3 (Dolby Digital Plus), AC-3, DTS that can't be decoded in browser
    */
   audioCodecSupported?: boolean;
+  /**
+   * Sorted keyframe (sync sample / IDR) timestamps in seconds.
+   * Extracted at import time via mediabunny EncodedPacketSink.
+   * Used for adaptive seek backtracking instead of fixed 1-second backtrack.
+   * Undefined for images/audio, null-ish for all-intra video (no optimization needed).
+   */
+  keyframeTimestamps?: number[];
+  /**
+   * Average interval between keyframes in seconds (GOP length).
+   * Derived from keyframeTimestamps at import time.
+   * Useful for diagnostics, UI display, and fallback seek heuristics.
+   */
+  gopInterval?: number;
   thumbnailId?: string;
   tags: string[];
   createdAt: number;

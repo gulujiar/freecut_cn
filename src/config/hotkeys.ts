@@ -23,6 +23,9 @@ export const HOTKEYS = {
   RIPPLE_DELETE: 'mod+delete',
   RIPPLE_DELETE_ALT: 'mod+backspace',
   FREEZE_FRAME: 'shift+f',
+  LINK_AUDIO_VIDEO: 'mod+alt+l',
+  UNLINK_AUDIO_VIDEO: 'alt+shift+l',
+  TOGGLE_LINKED_SELECTION: 'shift+l',
   NUDGE_LEFT: 'shift+left',
   NUDGE_RIGHT: 'shift+right',
   NUDGE_UP: 'shift+up',
@@ -50,11 +53,10 @@ export const HOTKEYS = {
 
   // Tools
   SELECTION_TOOL: 'v',
+  TRIM_EDIT_TOOL: 't',
   RAZOR_TOOL: 'c',
   SPLIT_AT_CURSOR: 'shift+c',
   RATE_STRETCH_TOOL: 'r',
-  ROLLING_EDIT_TOOL: 'n',
-  RIPPLE_EDIT_TOOL: 'b',
   SLIP_TOOL: 'y',
   SLIDE_TOOL: 'u',
 
@@ -76,11 +78,6 @@ export const HOTKEYS = {
   TOGGLE_KEYFRAME_EDITOR: 'mod+shift+a',
   KEYFRAME_EDITOR_GRAPH: '1',
   KEYFRAME_EDITOR_DOPESHEET: '2',
-  KEYFRAME_EDITOR_SPLIT: '3',
-
-  // Track Groups
-  GROUP_TRACKS: 'mod+g',
-  UNGROUP_TRACKS: 'mod+shift+g',
 
   // Source Monitor
   MARK_IN: 'i',
@@ -229,6 +226,7 @@ const BROWSER_HOSTILE_HOTKEYS: readonly BrowserHostileHotkey[] = [
   { binding: 'mod+n', browserAction: 'New window' },
   { binding: 'mod+shift+n', browserAction: 'New private window' },
   { binding: 'mod+l', browserAction: 'Focus address bar' },
+  { binding: 'mod+shift+l', browserAction: 'Focus address bar or search in some browsers' },
   { binding: 'mod+d', browserAction: 'Bookmark page or focus address bar' },
   { binding: 'mod+e', browserAction: 'Focus search or address bar in some browsers' },
   { binding: 'mod+p', browserAction: 'Print page' },
@@ -282,6 +280,9 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   RIPPLE_DELETE: 'Ripple delete selected items',
   RIPPLE_DELETE_ALT: 'Ripple delete selected items (alternative)',
   FREEZE_FRAME: 'Insert freeze frame at playhead',
+  LINK_AUDIO_VIDEO: 'Link selected clips',
+  UNLINK_AUDIO_VIDEO: 'Unlink selected clips',
+  TOGGLE_LINKED_SELECTION: 'Toggle linked selection',
   NUDGE_LEFT: 'Nudge selected visual items left (1px)',
   NUDGE_RIGHT: 'Nudge selected visual items right (1px)',
   NUDGE_UP: 'Nudge selected visual items up (1px)',
@@ -309,11 +310,10 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
 
   // Tools
   SELECTION_TOOL: 'Selection tool',
+  TRIM_EDIT_TOOL: 'Trim edit tool',
   RAZOR_TOOL: 'Razor tool',
   SPLIT_AT_CURSOR: 'Split at cursor',
   RATE_STRETCH_TOOL: 'Rate stretch tool',
-  ROLLING_EDIT_TOOL: 'Rolling edit tool',
-  RIPPLE_EDIT_TOOL: 'Ripple edit tool',
   SLIP_TOOL: 'Slip tool',
   SLIDE_TOOL: 'Slide tool',
 
@@ -335,11 +335,6 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   TOGGLE_KEYFRAME_EDITOR: 'Toggle keyframe editor panel',
   KEYFRAME_EDITOR_GRAPH: 'Switch keyframe editor to graph view',
   KEYFRAME_EDITOR_DOPESHEET: 'Switch keyframe editor to dopesheet view',
-  KEYFRAME_EDITOR_SPLIT: 'Switch keyframe editor to split view',
-
-  // Track Groups
-  GROUP_TRACKS: 'Group selected tracks',
-  UNGROUP_TRACKS: 'Ungroup selected tracks',
 
   // Source Monitor
   MARK_IN: 'Mark In point',

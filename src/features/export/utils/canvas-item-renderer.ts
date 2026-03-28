@@ -42,6 +42,13 @@ import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/time
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import type { VideoFrameSource } from './shared-video-extractor';
 import {
+  resolvePreviewDomVideoDrawDecision,
+  resolvePreviewMediabunnyInitAction,
+  shouldAllowPreviewVideoElementFallback,
+  shouldTryPreviewWorkerBitmap,
+  shouldUsePreviewStrictWaitingFallback,
+} from './frame-source-policy';
+import {
   applyPreviewPathVerticesToItem,
   applyPreviewPathVerticesToShape,
   hasCornerPin,
@@ -96,6 +103,7 @@ const FONT_WEIGHT_MAP: Record<string, number> = {
 };
 
 const TIER2_VIDEO_FRAME_TOLERANCE_FACTOR = 0.9;
+const WORKER_PRESEEK_WAIT_MS = 12;
 
 // ---------------------------------------------------------------------------
 // ItemRenderContext â€“ closure state passed explicitly
@@ -122,6 +130,12 @@ export interface ItemRenderContext {
   mediabunnyFailureCountByItem: Map<string, number>;
   ensureVideoItemReady?: (itemId: string) => Promise<boolean>;
   getCachedPredecodedBitmap?: (src: string, timestamp: number, toleranceSeconds?: number) => ImageBitmap | null;
+  waitForInflightPredecodedBitmap?: (
+    src: string,
+    timestamp: number,
+    toleranceSeconds?: number,
+    maxWaitMs?: number,
+  ) => Promise<ImageBitmap | null>;
 
   // Image / GIF state
   imageElements: Map<string, WorkerLoadedImage>;
@@ -386,6 +400,51 @@ function drawTier2VideoFrame(
   }
 }
 
+async function tryDrawWorkerPredecodedBitmap(
+  ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+  item: VideoItem,
+  transform: ItemTransform,
+  canvasSettings: CanvasSettings,
+  rctx: ItemRenderContext,
+  sourceTime: number,
+  toleranceSeconds: number,
+): Promise<boolean> {
+  if (rctx.renderMode !== 'preview' || !item.src) {
+    return false;
+  }
+
+  const drawBitmap = (bitmap: ImageBitmap): boolean => {
+    const drawDimensions = calculateMediaDrawDimensions(
+      bitmap.width,
+      bitmap.height,
+      transform,
+      canvasSettings,
+    );
+    return drawTier2VideoFrame(ctx, bitmap, drawDimensions);
+  };
+
+  const cachedBitmap = rctx.getCachedPredecodedBitmap?.(item.src, sourceTime, toleranceSeconds);
+  if (cachedBitmap && drawBitmap(cachedBitmap)) {
+    return true;
+  }
+
+  if (!rctx.waitForInflightPredecodedBitmap) {
+    return false;
+  }
+
+  const inflightBitmap = await rctx.waitForInflightPredecodedBitmap(
+    item.src,
+    sourceTime,
+    toleranceSeconds,
+    WORKER_PRESEEK_WAIT_MS,
+  );
+  if (inflightBitmap && drawBitmap(inflightBitmap)) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * Render video item using mediabunny (fast) or HTML5 video element (fallback).
  */
@@ -425,6 +484,16 @@ async function renderVideoItem(
   const adjustedSourceStart = sourceStart + sourceFrameOffset;
   const sourceTime = adjustedSourceStart / sourceFps + localTime * speed;
   const tier2ToleranceSeconds = getTier2VideoFrameToleranceSeconds(sourceFps);
+  const domVideo = isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0
+    ? rctx.domVideoElementProvider(item.id)
+    : null;
+  const domVideoDecision = resolvePreviewDomVideoDrawDecision({
+    domVideo,
+    sourceTime,
+    speed,
+    isRenderingTransition: !!rctx.isRenderingTransition,
+  });
+  const hasDomVideo = domVideoDecision.hasReadyDomVideo;
 
   // === TRY DOM VIDEO ELEMENT (zero-copy playback path) ===
   // During playback, the Player's <video> elements are already playing
@@ -435,72 +504,65 @@ async function renderVideoItem(
   // warmed, use DOM video as a one-shot fallback to avoid a 300-500ms keyframe
   // seek stall — mediabunny init runs async in the background so subsequent
   // frames switch to frame-accurate decode.
-  const isVariableSpeed = Math.abs(speed - 1) >= 0.01;
-
   // Always try DOM video for variable-speed clips during playback. Mediabunny's
   // keyframe seek (400ms+) is worse than DOM video's timing drift. Only skip DOM
   // video for 1x speed clips when mediabunny is available (frame-accurate, fast).
-  if (isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0) {
-    const domVideo = rctx.domVideoElementProvider(item.id);
-    if (domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0) {
-      const drift = Math.abs(domVideo.currentTime - sourceTime);
-      // Variable-speed clips naturally drift from their DOM video element
-      // because the browser plays at 1x while sourceTime advances at speed.
-      // Use a wider threshold proportional to speed to avoid falling back
-      // to mediabunny decode (which causes 50-500ms freezes on first decode).
-      // For variable-speed clips, use a very wide threshold to avoid EVER
-      // falling through to mediabunny (400ms+ keyframe seek). DOM video drift
-      // is visually acceptable; mediabunny stalls are not.
-      //
-      // During transitions (entry ramp-up and exit handoff), the DOM video
-      // element may be settling — play() was just called, Chrome's decoder
-      // is ramping up.  Accept very high drift (1s) to prefer a stale
-      // zero-copy frame (~1ms) over a mediabunny decode (~170ms stall).
-      // A 1-2 frame-old frame is invisible; a 170ms freeze is not.
-      const inTransition = rctx.isRenderingTransition || domVideo.dataset.transitionHold === '1';
-      const baseDriftThreshold = inTransition ? 1.0 : 0.2;
-      const driftThreshold = Math.abs(speed) > 1.01 ? Math.max(baseDriftThreshold, 0.5 * Math.abs(speed)) : baseDriftThreshold;
-      if (drift <= driftThreshold) {
-        const drawDimensions = calculateMediaDrawDimensions(
-          domVideo.videoWidth,
-          domVideo.videoHeight,
-          transform,
-          canvasSettings,
-        );
-        ctx.drawImage(
-          domVideo,
-          drawDimensions.x,
-          drawDimensions.y,
-          drawDimensions.width,
-          drawDimensions.height,
-        );
-        // For variable-speed clips using DOM fallback during playback,
-        // DON'T kick off mediabunny init — keep using DOM video for the
-        // entire playback session. Mediabunny init + keyframe seek takes
-        // 400-500ms on the main thread, causing visible frame drops.
-        // DOM video has slight timing drift at speed != 1, but no freezes.
-        return;
-      }
-    }
+  if (domVideo && domVideoDecision.shouldDraw) {
+    // Variable-speed clips naturally drift from their DOM video element
+    // because the browser plays at 1x while sourceTime advances at speed.
+    // Use a wider threshold proportional to speed to avoid falling back
+    // to mediabunny decode (which causes 50-500ms freezes on first decode).
+    // For variable-speed clips, use a very wide threshold to avoid EVER
+    // falling through to mediabunny (400ms+ keyframe seek). DOM video drift
+    // is visually acceptable; mediabunny stalls are not.
+    //
+    // During transitions (entry ramp-up and exit handoff), the DOM video
+    // element may be settling — play() was just called, Chrome's decoder
+    // is ramping up.  Accept very high drift (1s) to prefer a stale
+    // zero-copy frame (~1ms) over a mediabunny decode (~170ms stall).
+    // A 1-2 frame-old frame is invisible; a 170ms freeze is not.
+    const drawDimensions = calculateMediaDrawDimensions(
+      domVideo.videoWidth,
+      domVideo.videoHeight,
+      transform,
+      canvasSettings,
+    );
+    ctx.drawImage(
+      domVideo,
+      drawDimensions.x,
+      drawDimensions.y,
+      drawDimensions.width,
+      drawDimensions.height,
+    );
+    // For variable-speed clips using DOM fallback during playback,
+    // DON'T kick off mediabunny init — keep using DOM video for the
+    // entire playback session. Mediabunny init + keyframe seek takes
+    // 400-500ms on the main thread, causing visible frame drops.
+    // DOM video has slight timing drift at speed != 1, but no freezes.
+    return;
   }
 
-  if (
-    isPreviewMode
-    && !useMediabunny.has(item.id)
-    && !mediabunnyDisabledItems.has(item.id)
-    && rctx.ensureVideoItemReady
-  ) {
+  const mediabunnyInitAction = resolvePreviewMediabunnyInitAction({
+    renderMode: rctx.renderMode,
+    hasMediabunny: useMediabunny.has(item.id),
+    isMediabunnyDisabled: mediabunnyDisabledItems.has(item.id),
+    hasEnsureVideoItemReady: !!rctx.ensureVideoItemReady,
+    speed,
+  });
+  if (mediabunnyInitAction !== 'none' && rctx.ensureVideoItemReady) {
     // For variable-speed clips during playback, don't block on mediabunny init.
     // The init triggers a keyframe seek that blocks the main thread for 400ms+.
     // Instead, skip this frame (DOM video already drew it or it's invisible).
-    if (isVariableSpeed) {
+    if (mediabunnyInitAction === 'warm-background-and-skip') {
       void rctx.ensureVideoItemReady(item.id);
       return;
     }
-    try {
-      await rctx.ensureVideoItemReady(item.id);
-    } catch {
-      // Best effort in preview path; fallback behavior handled below.
+    if (mediabunnyInitAction === 'await-ready') {
+      try {
+        await rctx.ensureVideoItemReady(item.id);
+      } catch {
+        // Best effort in preview path; fallback behavior handled below.
+      }
     }
   }
 
@@ -508,7 +570,11 @@ async function renderVideoItem(
   // During startup/resolution races, mediabunny may not be ready for this frame yet.
   // In that window, skip drawing this item for the frame instead of logging a
   // misleading "Video element not found" warning.
-  if (isPreviewMode && !useMediabunny.has(item.id) && !hasFallbackVideoElement) {
+  if (shouldUsePreviewStrictWaitingFallback({
+    renderMode: rctx.renderMode,
+    hasMediabunny: useMediabunny.has(item.id),
+    hasFallbackVideoElement,
+  })) {
     if (scrubbingCache && extractor) {
       const dims = extractor.getDimensions();
       const drawDimensions = calculateMediaDrawDimensions(
@@ -522,31 +588,44 @@ async function renderVideoItem(
         return;
       }
     }
+
+    if (shouldTryPreviewWorkerBitmap({ renderMode: rctx.renderMode, hasReadyDomVideo: hasDomVideo })) {
+      const drewWorkerBitmap = await tryDrawWorkerPredecodedBitmap(
+        ctx,
+        item,
+        transform,
+        canvasSettings,
+        rctx,
+        sourceTime,
+        tier2ToleranceSeconds,
+      );
+      if (drewWorkerBitmap) {
+        if (rctx.ensureVideoItemReady) {
+          void rctx.ensureVideoItemReady(item.id);
+        }
+        return;
+      }
+    }
+
     return;
   }
 
   // === TRY PRE-DECODED BITMAP (from background Web Worker) ===
-  // Check for a pre-decoded bitmap from the decoder prewarm worker.
-  // Only used as a fallback when the DOM video element and mediabunny are
-  // both unavailable (e.g. first frame after a large timeline jump where
-  // the worker pre-seeked off-thread). Don't check this for clips that
-  // have a live DOM video element — the 0.5s cache tolerance would show
-  // stale frames during normal playback/scrub.
-  const hasDomVideo = isPreviewMode && rctx.domVideoElementProvider
-    ? (() => { const v = rctx.domVideoElementProvider!(item.id); return v && v.readyState >= 2 && v.videoWidth > 0; })()
-    : false;
-  const hasMediabunny = useMediabunny.has(item.id);
-  if (isPreviewMode && !hasDomVideo && !hasMediabunny && 'src' in item && item.src && rctx.getCachedPredecodedBitmap) {
-    const bitmap = rctx.getCachedPredecodedBitmap(item.src, sourceTime, tier2ToleranceSeconds);
-    if (bitmap) {
-      const drawDimensions = calculateMediaDrawDimensions(
-        bitmap.width,
-        bitmap.height,
-        transform,
-        canvasSettings,
-      );
-      ctx.drawImage(bitmap, drawDimensions.x, drawDimensions.y, drawDimensions.width, drawDimensions.height);
-      if (rctx.ensureVideoItemReady) {
+  // Prefer a worker-decoded exact frame before a cold main-thread extractor draw.
+  // This keeps large-jump and transition-entry stalls off the main thread while
+  // preserving the same exact-frame preview path once the extractor is warm.
+  if (shouldTryPreviewWorkerBitmap({ renderMode: rctx.renderMode, hasReadyDomVideo: hasDomVideo })) {
+    const drewWorkerBitmap = await tryDrawWorkerPredecodedBitmap(
+      ctx,
+      item,
+      transform,
+      canvasSettings,
+      rctx,
+      sourceTime,
+      tier2ToleranceSeconds,
+    );
+    if (drewWorkerBitmap) {
+      if (!useMediabunny.has(item.id) && rctx.ensureVideoItemReady) {
         void rctx.ensureVideoItemReady(item.id);
       }
       return;
@@ -657,9 +736,13 @@ async function renderVideoItem(
   }
 
   // === FALLBACK TO HTML5 VIDEO ELEMENT (slower, seeks required) ===
-  const allowPreviewFallback = isPreviewMode
-    && hasFallbackVideoElement
-    && (mediabunnyFailedThisFrame || !useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id));
+  const allowPreviewFallback = shouldAllowPreviewVideoElementFallback({
+    renderMode: rctx.renderMode,
+    hasFallbackVideoElement,
+    hasMediabunny: useMediabunny.has(item.id),
+    isMediabunnyDisabled: mediabunnyDisabledItems.has(item.id),
+    mediabunnyFailedThisFrame,
+  });
   if (!allowVideoElementFallback && !allowPreviewFallback) {
     return;
   }

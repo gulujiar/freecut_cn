@@ -12,6 +12,7 @@ import { mediaLibraryService } from '../services/media-library-service';
 import { getMediaType, formatDuration } from '../utils/validation';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { useMediaLibraryStore } from '../stores/media-library-store';
+import { CARD_GRID_BASE, CARD_LIST_BASE } from './card-styles';
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 import { proxyService } from '../services/proxy-service';
 import { mediaTranscriptionService } from '../services/media-transcription-service';
@@ -226,9 +227,7 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
     return (
       <div
         className={`
-          group panel-bg border rounded overflow-hidden
-          transition-all duration-200 cursor-pointer
-          flex items-center gap-3 p-2
+          ${CARD_LIST_BASE} cursor-pointer
           ${selected
             ? 'border-primary ring-1 ring-primary/20'
             : 'border-border hover:border-primary/50'
@@ -372,14 +371,12 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
   return (
     <div
       className={`
-        group relative panel-bg border-2 rounded-lg overflow-hidden
-        transition-all duration-300 cursor-pointer
-        aspect-square flex flex-col hover:scale-[1.02]
+        ${CARD_GRID_BASE} cursor-pointer
         ${selected
-          ? 'border-primary ring-2 ring-primary/20 scale-[1.02]'
+          ? 'border-primary ring-2 ring-primary/20'
           : 'border-border hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10'
         }
-        ${isImporting ? 'cursor-default hover:scale-100' : ''}
+        ${isImporting ? 'cursor-default' : ''}
       `}
       draggable={!isImporting}
       onDragStart={isImporting ? undefined : handleDragStart}

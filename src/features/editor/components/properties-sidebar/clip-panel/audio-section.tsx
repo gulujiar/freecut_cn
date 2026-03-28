@@ -1,8 +1,9 @@
 import { useCallback, useMemo } from 'react';
 import { Volume2, RotateCcw } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
-import type { TimelineItem, VideoItem, AudioItem } from '@/types/timeline';
-import { useTimelineStore } from '@/features/editor/deps/timeline-store';
+import type { TimelineItem } from '@/types/timeline';
+import { useKeyframesStore, useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
 import {
   getAutoKeyframeOperation,
@@ -17,12 +18,11 @@ import {
   SliderInput,
 } from '../components';
 import { getMixedValue } from '../utils';
+import { getAudioSectionItems } from './audio-section-utils';
 
 interface AudioSectionProps {
   items: TimelineItem[];
 }
-
-type AudioCapableItem = VideoItem | AudioItem;
 
 /**
  * Audio section - volume and audio fades.
@@ -38,22 +38,31 @@ export function AudioSection({ items }: AudioSectionProps) {
   // Get current playhead frame for keyframe animation (throttled to reduce re-renders)
   const currentFrame = useThrottledFrame();
 
-  // Get keyframes for all selected items
-  const allKeyframes = useTimelineStore((s) => s.keyframes);
-
   // Get batched keyframe action for auto-keyframing
   const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations);
 
   const audioItems = useMemo(
-    () =>
-      items.filter(
-        (item): item is AudioCapableItem =>
-          item.type === 'video' || item.type === 'audio'
-      ),
+    () => getAudioSectionItems(items),
     [items]
   );
 
   const itemIds = useMemo(() => audioItems.map((item) => item.id), [audioItems]);
+  const audioItemsById = useMemo(() => new Map(audioItems.map((item) => [item.id, item])), [audioItems]);
+  const itemKeyframes = useKeyframesStore(
+    useShallow(
+      useCallback(
+        (s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null),
+        [itemIds]
+      )
+    )
+  );
+  const keyframesByItemId = useMemo(() => {
+    const map = new Map<string, (typeof itemKeyframes)[number]>();
+    for (const [index, itemId] of itemIds.entries()) {
+      map.set(itemId, itemKeyframes[index] ?? null);
+    }
+    return map;
+  }, [itemIds, itemKeyframes]);
 
   // Get current values with keyframe animation applied
   const volume = useMemo(() => {
@@ -61,7 +70,7 @@ export function AudioSection({ items }: AudioSectionProps) {
 
     const values = audioItems.map((item) => {
       const staticVolume = item.volume ?? 0;
-      const itemKeyframes = allKeyframes.find((k) => k.itemId === item.id);
+      const itemKeyframes = keyframesByItemId.get(item.id) ?? undefined;
       if (itemKeyframes) {
         const volumeKfs = getPropertyKeyframes(itemKeyframes, 'volume');
         if (volumeKfs.length > 0) {
@@ -76,7 +85,7 @@ export function AudioSection({ items }: AudioSectionProps) {
     return values.every((v) => Math.abs(v - first) < 0.01)
       ? Math.round(first * 10) / 10
       : ('mixed' as const);
-  }, [audioItems, allKeyframes, currentFrame]);
+  }, [audioItems, keyframesByItemId, currentFrame]);
 
   const fadeIn = getMixedValue(audioItems, (item) => item.audioFadeIn, 0);
   const fadeOut = getMixedValue(audioItems, (item) => item.audioFadeOut, 0);
@@ -84,13 +93,13 @@ export function AudioSection({ items }: AudioSectionProps) {
   // Helper: auto-keyframe volume on value change
   const autoKeyframeVolume = useCallback(
     (itemId: string, value: number): AutoKeyframeOperation | null => {
-      const item = audioItems.find((i) => i.id === itemId);
+      const item = audioItemsById.get(itemId);
       if (!item) return null;
 
-      const itemKeyframes = allKeyframes.find((k) => k.itemId === itemId);
+      const itemKeyframes = keyframesByItemId.get(itemId) ?? undefined;
       return getAutoKeyframeOperation(item, itemKeyframes, 'volume', value, currentFrame);
     },
-    [audioItems, allKeyframes, currentFrame]
+    [audioItemsById, currentFrame, keyframesByItemId]
   );
 
   // Live preview for volume (during drag)

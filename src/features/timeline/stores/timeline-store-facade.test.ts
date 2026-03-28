@@ -34,6 +34,7 @@ const mediaValidationMocks = vi.hoisted(() => ({
 }));
 
 const mediaLibraryMocks = vi.hoisted(() => ({
+  mediaById: {},
   setOrphanedClips: vi.fn(),
   openOrphanedClipsDialog: vi.fn(),
 }));
@@ -92,6 +93,8 @@ import { useTimelineStore } from './timeline-store-facade';
 describe('TimelineStoreFacade', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    playbackMocks.currentFrame = 0;
+    zoomMocks.level = 1;
     // Reset all domain stores
     useItemsStore.getState().setItems([]);
     useItemsStore.getState().setTracks([]);
@@ -107,6 +110,7 @@ describe('TimelineStoreFacade', () => {
     useCompositionsStore.getState().setCompositions([]);
     useCompositionNavigationStore.getState().resetToRoot();
     useTimelineCommandStore.getState().clearHistory();
+    mediaLibraryMocks.mediaById = {};
   });
 
   describe('getSnapshot / getState', () => {
@@ -305,6 +309,45 @@ describe('TimelineStoreFacade', () => {
       expect(typeof temporal.redo).toBe('function');
       expect(typeof temporal.clear).toBe('function');
     });
+
+    it('undos and redos audio volume updates through the facade', () => {
+      useItemsStore.getState().setTracks([
+        {
+          id: 'track-a1',
+          name: 'A1',
+          kind: 'audio',
+          height: 80,
+          locked: false,
+          visible: true,
+          muted: false,
+          solo: false,
+          order: 0,
+          items: [],
+        },
+      ]);
+      useItemsStore.getState().setItems([
+        {
+          id: 'audio-1',
+          type: 'audio',
+          trackId: 'track-a1',
+          from: 0,
+          durationInFrames: 90,
+          label: 'voiceover.wav',
+          src: 'blob:audio',
+          mediaId: 'media-a1',
+          volume: 0,
+        },
+      ]);
+
+      useTimelineStore.getState().updateItem('audio-1', { volume: -9.5 });
+      expect(useItemsStore.getState().itemById['audio-1']?.volume).toBe(-9.5);
+
+      useTimelineCommandStore.getState().undo();
+      expect(useItemsStore.getState().itemById['audio-1']?.volume).toBe(0);
+
+      useTimelineCommandStore.getState().redo();
+      expect(useItemsStore.getState().itemById['audio-1']?.volume).toBe(-9.5);
+    });
   });
 
   describe('actions', () => {
@@ -327,6 +370,79 @@ describe('TimelineStoreFacade', () => {
     });
   });
 
+  describe('saveTimeline', () => {
+    it('persists full transition metadata', async () => {
+      indexedDbMocks.getProject.mockResolvedValue({
+        id: 'project-1',
+        metadata: { fps: 30, width: 1920, height: 1080 },
+      });
+
+      useItemsStore.getState().setTracks([
+        {
+          id: 'track-1',
+          name: 'Video',
+          height: 80,
+          locked: false,
+          visible: true,
+          muted: false,
+          solo: false,
+          order: 0,
+          items: [],
+        },
+      ]);
+
+      useTransitionsStore.getState().setTransitions([
+        {
+          id: 'transition-1',
+          type: 'crossfade',
+          leftClipId: 'clip-1',
+          rightClipId: 'clip-2',
+          trackId: 'track-1',
+          durationInFrames: 24,
+          presentation: 'wipe',
+          timing: 'cubic-bezier',
+          direction: 'from-left',
+          alignment: 0.25,
+          bezierPoints: { x1: 0.1, y1: 0.2, x2: 0.9, y2: 0.8 },
+          presetId: 'preset-1',
+          properties: { softness: 0.7, customMode: 'smooth' },
+          createdAt: 1000,
+          lastModifiedAt: 2000,
+        },
+      ]);
+
+      await useTimelineStore.getState().saveTimeline('project-1');
+
+      expect(indexedDbMocks.updateProject).toHaveBeenCalledWith(
+        'project-1',
+        expect.objectContaining({
+          timeline: expect.objectContaining({
+            transitions: [
+              expect.objectContaining({
+                id: 'transition-1',
+                type: 'crossfade',
+                leftClipId: 'clip-1',
+                rightClipId: 'clip-2',
+                trackId: 'track-1',
+                durationInFrames: 24,
+                presentation: 'wipe',
+                timing: 'cubic-bezier',
+                direction: 'from-left',
+                alignment: 0.25,
+                bezierPoints: { x1: 0.1, y1: 0.2, x2: 0.9, y2: 0.8 },
+                presetId: 'preset-1',
+                properties: { softness: 0.7, customMode: 'smooth' },
+                createdAt: 1000,
+                lastModifiedAt: 2000,
+              }),
+            ],
+          }),
+          updatedAt: expect.any(Number),
+        })
+      );
+    });
+  });
+
   describe('loadTimeline', () => {
     it('initializes default tracks for new project with no timeline', async () => {
       indexedDbMocks.getProject.mockResolvedValue({
@@ -339,8 +455,10 @@ describe('TimelineStoreFacade', () => {
       await useTimelineStore.getState().loadTimeline('project-1');
 
       const itemsState = useItemsStore.getState();
-      expect(itemsState.tracks).toHaveLength(1);
+      expect(itemsState.tracks).toHaveLength(2);
       expect(itemsState.tracks[0]!.id).toBe('track-1');
+      expect(itemsState.tracks[0]!).toMatchObject({ name: 'V1', kind: 'video' });
+      expect(itemsState.tracks[1]!).toMatchObject({ id: 'track-2', name: 'A1', kind: 'audio' });
       expect(itemsState.items).toHaveLength(0);
     });
 
@@ -390,6 +508,200 @@ describe('TimelineStoreFacade', () => {
       await useTimelineStore.getState().loadTimeline('project-1');
 
       expect(useTimelineSettingsStore.getState().isTimelineLoading).toBe(false);
+    });
+
+    it('repairs legacy AV track layout inside compound clips on load', async () => {
+      mediaLibraryMocks.mediaById = {
+        'media-comp-1': { audioCodec: 'aac' },
+      };
+      indexedDbMocks.getProject.mockResolvedValue({
+        id: 'project-1',
+        metadata: { fps: 30 },
+        timeline: {
+          tracks: [{ id: 'root-v1', name: 'V1', kind: 'video', order: 0, height: 80, locked: false, visible: true, muted: false, solo: false }],
+          items: [{
+            id: 'root-comp-1',
+            type: 'composition',
+            trackId: 'root-v1',
+            from: 0,
+            durationInFrames: 60,
+            label: 'Compound 1',
+            compositionId: 'comp-1',
+            compositionWidth: 1920,
+            compositionHeight: 1080,
+          }],
+          currentFrame: 0,
+          zoomLevel: 1,
+          scrollPosition: 0,
+          keyframes: [],
+          transitions: [],
+          markers: [],
+          compositions: [{
+            id: 'comp-1',
+            name: 'Compound 1',
+            fps: 30,
+            width: 1920,
+            height: 1080,
+            durationInFrames: 120,
+            tracks: [{ id: 'comp-track-1', name: 'Track 1', order: 0, height: 80, locked: false, visible: true, muted: false, solo: false }],
+            items: [{
+              id: 'comp-video-1',
+              type: 'video',
+              trackId: 'comp-track-1',
+              from: 0,
+              durationInFrames: 60,
+              label: 'compound.mp4',
+              src: 'blob:compound',
+              mediaId: 'media-comp-1',
+              sourceStart: 0,
+              sourceEnd: 60,
+              sourceDuration: 120,
+            }],
+            transitions: [],
+            keyframes: [],
+          }],
+        },
+      });
+      mediaValidationMocks.validateMediaReferences.mockResolvedValue([]);
+
+      await useTimelineStore.getState().loadTimeline('project-1');
+
+      const rootTracks = useItemsStore.getState().tracks;
+      const rootItems = useItemsStore.getState().items;
+      const composition = useCompositionsStore.getState().compositions[0];
+      const rootAudioTrack = rootTracks.find((track) => track.kind === 'audio');
+      expect(rootTracks.map((track) => `${track.name}:${track.kind}`)).toEqual([
+        'V1:video',
+        'A1:audio',
+      ]);
+      const rootCompoundVideo = rootItems.find((item) => item.type === 'composition');
+      const rootCompoundAudio = rootItems.find((item) => item.type === 'audio' && item.compositionId === 'comp-1');
+      expect(rootCompoundVideo).toMatchObject({ trackId: 'root-v1', sourceStart: 0, sourceEnd: 60, sourceDuration: 120 });
+      expect(rootCompoundAudio).toMatchObject({ trackId: rootAudioTrack?.id, compositionId: 'comp-1', sourceStart: 0, sourceEnd: 60, sourceDuration: 120 });
+      expect(rootCompoundAudio?.linkedGroupId).toBe(rootCompoundVideo?.linkedGroupId);
+
+      expect(composition?.tracks.map((track) => `${track.name}:${track.kind}`)).toEqual([
+        'V1:video',
+        'A1:audio',
+      ]);
+      expect(composition?.items.filter((item) => item.type === 'video')).toHaveLength(1);
+      expect(composition?.items.filter((item) => item.type === 'audio')).toHaveLength(1);
+
+      const compoundVideo = composition?.items.find((item) => item.type === 'video');
+      const compoundAudio = composition?.items.find((item) => item.type === 'audio');
+      expect(compoundVideo?.linkedGroupId).toBeDefined();
+      expect(compoundAudio?.linkedGroupId).toBe(compoundVideo?.linkedGroupId);
+      expect(indexedDbMocks.updateProject).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not create extra audio tracks for already repaired compound wrappers on reload', async () => {
+      mediaLibraryMocks.mediaById = {
+        'media-comp-1': { audioCodec: 'aac' },
+      };
+      indexedDbMocks.getProject.mockResolvedValue({
+        id: 'project-1',
+        metadata: { fps: 30 },
+        timeline: {
+          tracks: [
+            { id: 'root-a1', name: 'A1', kind: 'audio', order: 0, height: 80, locked: false, visible: true, muted: false, solo: false },
+            { id: 'root-v1', name: 'V1', kind: 'video', order: 1, height: 80, locked: false, visible: true, muted: false, solo: false },
+            { id: 'root-a2', name: 'A2', kind: 'audio', order: 2, height: 80, locked: false, visible: true, muted: false, solo: false },
+          ],
+          items: [
+            {
+              id: 'root-comp-1',
+              type: 'composition',
+              trackId: 'root-v1',
+              from: 10,
+              durationInFrames: 60,
+              label: 'Compound 1',
+              compositionId: 'comp-1',
+              linkedGroupId: 'group-1',
+              sourceStart: 15,
+              sourceEnd: 75,
+              sourceDuration: 120,
+              sourceFps: 30,
+              speed: 1,
+              compositionWidth: 1920,
+              compositionHeight: 1080,
+            },
+            {
+              id: 'root-comp-a1',
+              type: 'audio',
+              trackId: 'root-a1',
+              from: 10,
+              durationInFrames: 60,
+              label: 'Compound 1',
+              compositionId: 'comp-1',
+              linkedGroupId: 'group-1',
+              sourceStart: 15,
+              sourceEnd: 75,
+              sourceDuration: 120,
+              sourceFps: 30,
+              speed: 1,
+              src: '',
+            },
+          ],
+          currentFrame: 0,
+          zoomLevel: 1,
+          scrollPosition: 0,
+          keyframes: [],
+          transitions: [],
+          markers: [],
+          compositions: [{
+            id: 'comp-1',
+            name: 'Compound 1',
+            fps: 30,
+            width: 1920,
+            height: 1080,
+            durationInFrames: 120,
+            tracks: [
+              { id: 'comp-v1', name: 'V1', kind: 'video', order: 0, height: 80, locked: false, visible: true, muted: false, solo: false },
+              { id: 'comp-a1', name: 'A1', kind: 'audio', order: 1, height: 80, locked: false, visible: true, muted: false, solo: false },
+            ],
+            items: [
+              {
+                id: 'comp-video-1',
+                type: 'video',
+                trackId: 'comp-v1',
+                from: 0,
+                durationInFrames: 120,
+                label: 'compound.mp4',
+                src: 'blob:compound',
+                mediaId: 'media-comp-1',
+                sourceStart: 0,
+                sourceEnd: 120,
+                sourceDuration: 120,
+              },
+              {
+                id: 'comp-audio-1',
+                type: 'audio',
+                trackId: 'comp-a1',
+                from: 0,
+                durationInFrames: 120,
+                label: 'compound.mp4',
+                src: 'blob:compound-audio',
+                mediaId: 'media-comp-1',
+                sourceStart: 0,
+                sourceEnd: 120,
+                sourceDuration: 120,
+              },
+            ],
+            transitions: [],
+            keyframes: [],
+          }],
+        },
+      });
+      mediaValidationMocks.validateMediaReferences.mockResolvedValue([]);
+
+      await useTimelineStore.getState().loadTimeline('project-1');
+
+      const rootTracks = useItemsStore.getState().tracks;
+      const rootItems = useItemsStore.getState().items;
+      expect(rootTracks.map((track) => track.id)).toEqual(['root-a1', 'root-v1']);
+      expect(rootItems.find((item) => item.id === 'root-comp-1')).toMatchObject({ trackId: 'root-v1', sourceStart: 15, sourceEnd: 75 });
+      expect(rootItems.find((item) => item.id === 'root-comp-a1')).toMatchObject({ trackId: 'root-a1', sourceStart: 15, sourceEnd: 75 });
+      expect(indexedDbMocks.updateProject).toHaveBeenCalledTimes(1);
     });
   });
 });

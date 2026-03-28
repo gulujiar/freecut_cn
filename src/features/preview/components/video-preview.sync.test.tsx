@@ -89,6 +89,7 @@ const rendererMockState = vi.hoisted(() => {
     preload: ReturnType<typeof vi.fn>;
     renderFrame: ReturnType<typeof vi.fn>;
     prewarmFrame: ReturnType<typeof vi.fn>;
+    prewarmFrames: ReturnType<typeof vi.fn>;
     invalidateFrameCache: ReturnType<typeof vi.fn>;
     setDomVideoElementProvider: ReturnType<typeof vi.fn>;
     getScrubbingCache: () => null;
@@ -97,10 +98,18 @@ const rendererMockState = vi.hoisted(() => {
 
   const instances: RendererMock[] = [];
   const create = vi.fn(async () => {
+    const prewarmFrame = vi.fn(async (frame: number) => {
+      void frame;
+    });
     const renderer: RendererMock = {
       preload: vi.fn(async () => {}),
       renderFrame: vi.fn(async () => {}),
-      prewarmFrame: vi.fn(async () => {}),
+      prewarmFrame,
+      prewarmFrames: vi.fn(async (frames: number[]) => {
+        for (const frame of frames) {
+          await prewarmFrame(frame);
+        }
+      }),
       invalidateFrameCache: vi.fn(),
       setDomVideoElementProvider: vi.fn(),
       getScrubbingCache: () => null,

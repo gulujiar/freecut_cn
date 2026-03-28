@@ -1,7 +1,7 @@
 import React from 'react';
 import { AbsoluteFill } from '@/features/composition-runtime/deps/player';
 import { useDebugStore } from '@/features/composition-runtime/deps/stores';
-import type { TimelineItem, ShapeItem } from '@/types/timeline';
+import type { AudioItem, TimelineItem, ShapeItem } from '@/types/timeline';
 import type { TransformProperties } from '@/types/transform';
 import { DebugOverlay } from './debug-overlay';
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
@@ -24,7 +24,7 @@ import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
 import { createLogger } from '@/shared/logging/logger';
 
-const logger = createLogger('CompositionItem');
+function getLogger() { return createLogger('CompositionItem'); }
 
 /** Mask information passed from composition to items */
 export interface MaskInfo {
@@ -43,6 +43,8 @@ interface ItemProps {
   masks?: MaskInfo[];
   /** Current composition nesting depth (prevents infinite recursion) */
   renderDepth?: number;
+  compositionRenderMode?: 'full' | 'visual-only' | 'audio-only';
+  audioGainMultiplier?: number;
 }
 
 /**
@@ -59,7 +61,7 @@ interface ItemProps {
  *
  * Memoized to prevent unnecessary re-renders when parent (MainComposition) updates.
  */
-export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], renderDepth = 0 }) => {
+export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], renderDepth = 0, compositionRenderMode = 'full', audioGainMultiplier = 1 }) => {
   // Use muted prop directly - MainComposition already passes track.muted
   // Avoiding store subscription here prevents re-render issues with @legacy-video/media Audio
 
@@ -119,7 +121,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
     const hasCorruptedMetadata = sourceDuration === 0 && effectiveSourceSegment === 0 && trimBefore > MAX_REASONABLE_FRAMES;
 
     if (hasCorruptedMetadata || isInvalidSeek) {
-      logger.error('Invalid source position detected:', {
+      getLogger().error('Invalid source position detected:', {
         itemId: item.id,
         sourceStart: item.sourceStart,
         trimBefore,
@@ -153,7 +155,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
         1,
         sourceToTimelineFrames(effectiveDuration, playbackRate, sourceFps, timelineFps)
       );
-      logger.warn('Clip duration exceeds source duration (graceful clamp):', {
+      getLogger().warn('Clip duration exceeds source duration (graceful clamp):', {
         itemId: item.id,
         sourceFramesNeeded,
         sourceDuration,
@@ -206,6 +208,22 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
   }
 
   if (item.type === 'audio') {
+    if (item.compositionId) {
+      if (renderDepth >= MAX_RENDER_DEPTH) {
+        return null;
+      }
+
+      return (
+        <CompositionContent
+          item={item as AudioItem & { compositionId: string }}
+          parentMuted={muted}
+          renderDepth={renderDepth + 1}
+          renderMode="audio-only"
+          audioGainMultiplier={audioGainMultiplier}
+        />
+      );
+    }
+
     // Guard against missing src (media resolution failed)
     if (!item.src) {
       return null; // Audio can fail silently
@@ -217,6 +235,10 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
     // Get playback rate from speed property
     const playbackRate = item.speed ?? DEFAULT_SPEED;
 
+    const trackVolumeDb = ('trackVolumeDb' in item && typeof item.trackVolumeDb === 'number')
+      ? item.trackVolumeDb
+      : 0;
+
     // Use PitchCorrectedAudio for pitch-preserved playback during preview
     // and toneFrequency correction during rendering
     return (
@@ -224,13 +246,18 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
         src={item.src}
         itemId={item.id}
         trimBefore={trimBefore}
-        volume={item.volume ?? 0}
+        volume={(item.volume ?? 0) + trackVolumeDb}
         playbackRate={playbackRate}
         sourceFps={sourceFps}
         muted={muted}
         durationInFrames={item.durationInFrames}
         audioFadeIn={item.audioFadeIn}
         audioFadeOut={item.audioFadeOut}
+        audioFadeInCurve={item.audioFadeInCurve}
+        audioFadeOutCurve={item.audioFadeOutCurve}
+        audioFadeInCurveX={item.audioFadeInCurveX}
+        audioFadeOutCurveX={item.audioFadeOutCurveX}
+        volumeMultiplier={audioGainMultiplier}
       />
     );
   }
@@ -322,7 +349,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
     // Pass parent muted so muting the track silences all sub-comp audio
     return (
       <ItemVisualWrapper item={item} masks={masks}>
-        <CompositionContent item={item} parentMuted={muted} renderDepth={renderDepth + 1} />
+        <CompositionContent item={item} parentMuted={muted} renderDepth={renderDepth + 1} renderMode={compositionRenderMode} audioGainMultiplier={audioGainMultiplier} />
       </ItemVisualWrapper>
     );
   }

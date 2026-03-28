@@ -64,7 +64,7 @@ const itemKeyframesSchema = z.object({
 // Timeline Item Schemas
 // ============================================================================
 
-const itemTypeSchema = z.enum(['video', 'audio', 'text', 'image', 'shape', 'adjustment']);
+const itemTypeSchema = z.enum(['video', 'audio', 'text', 'image', 'shape', 'composition', 'adjustment']);
 
 const shapeTypeSchema = z.enum([
   'rectangle',
@@ -254,6 +254,7 @@ const timelineItemSchema = z.object({
   label: z.string(),
   mediaId: z.string().optional(),
   originId: z.string().optional(),
+  linkedGroupId: z.string().optional(),
   type: itemTypeSchema,
   // Source fields
   src: z.string().optional(),
@@ -356,6 +357,17 @@ const transitionSchema = z.object({
   presentation: z.string().optional(),
   timing: z.string().optional(),
   direction: z.string().optional(),
+  alignment: z.number().min(0).max(1).optional(),
+  bezierPoints: z.object({
+    x1: z.number().min(0).max(1),
+    y1: z.number(),
+    x2: z.number().min(0).max(1),
+    y2: z.number(),
+  }).optional(),
+  presetId: z.string().min(1).optional(),
+  properties: z.record(z.string(), z.unknown()).optional(),
+  createdAt: z.number().int().min(0).optional(),
+  lastModifiedAt: z.number().int().min(0).optional(),
 });
 
 // ============================================================================

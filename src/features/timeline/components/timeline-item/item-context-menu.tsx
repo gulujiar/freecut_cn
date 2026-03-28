@@ -32,9 +32,13 @@ interface ItemContextMenuProps {
   closerEdge: 'left' | 'right' | null;
   /** Keyframed properties for the item (used to build clear submenu) */
   keyframedProperties?: PropertyKeyframes[];
+  canLinkSelected?: boolean;
+  canUnlinkSelected?: boolean;
   onJoinSelected: () => void;
   onJoinLeft: () => void;
   onJoinRight: () => void;
+  onLinkSelected?: () => void;
+  onUnlinkSelected?: () => void;
   onRippleDelete: () => void;
   onDelete: () => void;
   onClearAllKeyframes?: () => void;
@@ -73,9 +77,13 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   hasJoinableRight,
   closerEdge,
   keyframedProperties,
+  canLinkSelected,
+  canUnlinkSelected,
   onJoinSelected,
   onJoinLeft,
   onJoinRight,
+  onLinkSelected,
+  onUnlinkSelected,
   onRippleDelete,
   onDelete,
   onClearAllKeyframes,
@@ -149,6 +157,24 @@ export const ItemContextMenu = memo(function ItemContextMenu({
             </>
           );
         })()}
+
+        {(canLinkSelected || canUnlinkSelected) && (
+          <>
+            {canLinkSelected && onLinkSelected && (
+              <ContextMenuItem onClick={onLinkSelected}>
+                Link Clips
+                <ContextMenuShortcut>{formatHotkeyBinding(hotkeys.LINK_AUDIO_VIDEO)}</ContextMenuShortcut>
+              </ContextMenuItem>
+            )}
+            {canUnlinkSelected && onUnlinkSelected && (
+              <ContextMenuItem onClick={onUnlinkSelected}>
+                Unlink Clips
+                <ContextMenuShortcut>{formatHotkeyBinding(hotkeys.UNLINK_AUDIO_VIDEO)}</ContextMenuShortcut>
+              </ContextMenuItem>
+            )}
+            <ContextMenuSeparator />
+          </>
+        )}
 
         {/* Clear Keyframes submenu - only show if item has keyframes */}
         {hasKeyframes && (
@@ -258,17 +284,17 @@ export const ItemContextMenu = memo(function ItemContextMenu({
         {/* Composition operations */}
         {isCompositionItem && onEnterComposition && (
           <ContextMenuItem onClick={onEnterComposition}>
-            Enter Composition
+            Open Compound Clip
           </ContextMenuItem>
         )}
         {isCompositionItem && onDissolveComposition && (
           <ContextMenuItem onClick={onDissolveComposition}>
-            Dissolve Pre-Comp
+            Dissolve Compound Clip
           </ContextMenuItem>
         )}
         {canCreatePreComp && onCreatePreComp && (
           <ContextMenuItem onClick={onCreatePreComp}>
-            Create Pre-Composition
+            Create Compound Clip
           </ContextMenuItem>
         )}
         {((isCompositionItem && (onEnterComposition || onDissolveComposition)) || (canCreatePreComp && onCreatePreComp)) && (

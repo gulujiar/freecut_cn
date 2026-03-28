@@ -1,4 +1,4 @@
-﻿import { useState, useMemo, useEffect, useRef, memo } from 'react';
+import { useState, useMemo, useRef, memo } from 'react';
 import { Loader2, Upload, AlertTriangle } from 'lucide-react';
 import { createLogger } from '@/shared/logging/logger';
 
@@ -7,8 +7,6 @@ import { MediaCard } from './media-card';
 import { useMediaLibraryStore, useFilteredMediaItems } from '../stores/media-library-store';
 import { useTimelineStore } from '@/features/media-library/deps/timeline-stores';
 import { useEditorStore } from '@/shared/state/editor';
-import { useMarqueeSelection, type MarqueeItem } from '@/hooks/use-marquee-selection';
-import { MarqueeOverlay } from '@/components/marquee-overlay';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -20,25 +18,27 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+import { GRID_COLS_BY_SIZE } from './media-grid-constants';
+
 interface MediaGridProps {
   onMediaSelect?: (mediaId: string) => void;
   viewMode?: 'grid' | 'list';
+  /** Grid item size (1 = largest, 5 = smallest) */
+  itemSize?: number;
 }
 
-export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'grid' }: MediaGridProps) {
+export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'grid', itemSize = 3 }: MediaGridProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [mediaIdToDelete, setMediaIdToDelete] = useState<string | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const wasMarqueeDraggingRef = useRef(false);
-  const hasAnimatedRef = useRef(false);
   const lastSelectedIdRef = useRef<string | null>(null);
 
   const filteredItems = useFilteredMediaItems();
   const isLoading = useMediaLibraryStore((s) => s.isLoading);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
+  const selectedCompositionIds = useMediaLibraryStore((s) => s.selectedCompositionIds);
   const brokenMediaIds = useMediaLibraryStore((s) => s.brokenMediaIds);
   const toggleMediaSelection = useMediaLibraryStore((s) => s.toggleMediaSelection);
-  const selectMedia = useMediaLibraryStore((s) => s.selectMedia);
+  const setSelection = useMediaLibraryStore((s) => s.setSelection);
   const deleteMedia = useMediaLibraryStore((s) => s.deleteMedia);
   const relinkMedia = useMediaLibraryStore((s) => s.relinkMedia);
   const importMedia = useMediaLibraryStore((s) => s.importMedia);
@@ -55,54 +55,6 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
     return timelineItems.filter((item) => item.mediaId === mediaIdToDelete);
   }, [mediaIdToDelete]);
 
-  // Create marquee items from filtered media
-  const marqueeItems: MarqueeItem[] = useMemo(
-    () =>
-      filteredItems.map((media) => ({
-        id: media.id,
-        getBoundingRect: () => {
-          const element = document.querySelector(`[data-media-id="${media.id}"]`);
-          if (!element) {
-            return { left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0 };
-          }
-          const rect = element.getBoundingClientRect();
-          return {
-            left: rect.left,
-            top: rect.top,
-            right: rect.right,
-            bottom: rect.bottom,
-            width: rect.width,
-            height: rect.height,
-          };
-        },
-      })),
-    [filteredItems]
-  );
-
-  // Marquee selection
-  const { marqueeState } = useMarqueeSelection({
-    containerRef: containerRef as React.RefObject<HTMLElement>,
-    items: marqueeItems,
-    onSelectionChange: (ids) => {
-      selectMedia(ids);
-    },
-    enabled: filteredItems.length > 0,
-  });
-
-  // Track when marquee was active to prevent click from clearing selection
-  useEffect(() => {
-    if (marqueeState.active) {
-      wasMarqueeDraggingRef.current = true;
-    }
-  }, [marqueeState.active]);
-
-  // Mark as animated after first render to prevent re-animation on tab switches
-  useEffect(() => {
-    if (filteredItems.length > 0) {
-      hasAnimatedRef.current = true;
-    }
-  }, [filteredItems.length]);
-
   const handleCardSelect = (mediaId: string, event?: React.MouseEvent) => {
     // Shift click: select range from last selected item to this item
     if (event?.shiftKey && lastSelectedIdRef.current) {
@@ -117,10 +69,10 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
         // If Ctrl/Cmd is also held, add range to existing selection
         if (event.ctrlKey || event.metaKey) {
           const newSelection = [...new Set([...selectedMediaIds, ...rangeIds])];
-          selectMedia(newSelection);
+          setSelection({ mediaIds: newSelection, compositionIds: selectedCompositionIds });
         } else {
           // Replace selection with range
-          selectMedia(rangeIds);
+          setSelection({ mediaIds: rangeIds, compositionIds: [] });
         }
       }
     } else if (event?.ctrlKey || event?.metaKey) {
@@ -129,7 +81,7 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
       lastSelectedIdRef.current = mediaId;
     } else {
       // Normal click: select only this item (clear others)
-      selectMedia([mediaId]);
+      setSelection({ mediaIds: [mediaId], compositionIds: [] });
       lastSelectedIdRef.current = mediaId;
     }
     onMediaSelect?.(mediaId);
@@ -198,22 +150,6 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
     }
   };
 
-  const handleContainerClick = (e: React.MouseEvent) => {
-    // Don't clear selection if we just finished a marquee drag
-    if (wasMarqueeDraggingRef.current) {
-      wasMarqueeDraggingRef.current = false;
-      return;
-    }
-
-    // Check if click was on a media card by looking for the data attribute
-    const clickedOnCard = (e.target as HTMLElement).closest('[data-media-id]');
-
-    if (!clickedOnCard) {
-      // Clear selection when clicking empty area (not on a card)
-      selectMedia([]);
-    }
-  };
-
   // Handle click on empty state to open file picker
   const handleEmptyStateClick = async () => {
     try {
@@ -225,14 +161,7 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
 
   // Main container with dropzone functionality
   return (
-    <div
-      ref={containerRef}
-      className="relative"
-      onClick={handleContainerClick}
-    >
-      {/* Marquee selection overlay */}
-      <MarqueeOverlay marqueeState={marqueeState} />
-
+    <div>
       {/* Content */}
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
@@ -272,13 +201,11 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
           </div>
         </div>
       ) : (
-        <div className={viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 gap-4 max-w-5xl' : 'space-y-2'}>
-          {filteredItems.map((media, index) => (
+        <div className={viewMode === 'grid' ? `grid ${GRID_COLS_BY_SIZE[itemSize] ?? GRID_COLS_BY_SIZE[3]}` : 'space-y-2'}>
+          {filteredItems.map((media) => (
             <div
               key={media.id}
               data-media-id={media.id}
-              className={hasAnimatedRef.current ? '' : 'animate-in fade-in slide-in-from-bottom-4 duration-300'}
-              style={hasAnimatedRef.current ? {} : { animationDelay: `${index * 30}ms` }}
             >
               <MediaCard
                 media={media}
@@ -331,4 +258,3 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
     </div>
   );
 });
-

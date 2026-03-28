@@ -34,12 +34,6 @@ export interface TimelineState {
 
 export interface TimelineActions {
   setTracks: (tracks: TimelineTrack[]) => void;
-  // Track group actions
-  createGroup: (trackIds: string[]) => void;
-  ungroup: (groupTrackId: string) => void;
-  toggleGroupCollapse: (groupTrackId: string) => void;
-  addToGroup: (trackIds: string[], groupTrackId: string) => void;
-  removeFromGroup: (trackIds: string[]) => void;
   addItem: (item: TimelineItem) => void;
   addItems: (items: TimelineItem[]) => void;
   updateItem: (id: string, updates: Partial<TimelineItem>) => void;
@@ -51,7 +45,9 @@ export interface TimelineActions {
   setScrollPosition: (position: number) => void;
   moveItem: (id: string, newFrom: number, newTrackId?: string) => void;
   moveItems: (updates: Array<{ id: string; from: number; trackId?: string }>) => void;
+  moveItemsWithTrackChanges: (tracks: TimelineTrack[], updates: Array<{ id: string; from: number; trackId?: string }>) => void;
   duplicateItems: (itemIds: string[], positions: Array<{ from: number; trackId: string }>) => void;
+  duplicateItemsWithTrackChanges: (tracks: TimelineTrack[], itemIds: string[], positions: Array<{ from: number; trackId: string }>) => TimelineItem[];
   trimItemStart: (id: string, trimAmount: number) => void;
   trimItemEnd: (id: string, trimAmount: number) => void;
   rollingTrimItems: (leftId: string, rightId: string, editPointDelta: number) => void;
@@ -59,6 +55,7 @@ export interface TimelineActions {
   splitItem: (id: string, splitFrame: number) => void;
   joinItems: (itemIds: string[]) => void;
   rateStretchItem: (id: string, newFrom: number, newDuration: number, newSpeed: number) => void;
+  resetSpeedWithRipple: (itemIds: string[]) => void;
   setInPoint: (frame: number) => void;
   setOutPoint: (frame: number) => void;
   clearInOutPoints: () => void;
@@ -113,6 +110,7 @@ export interface TimelineActions {
   removeKeyframesForProperty: (itemId: string, property: AnimatableProperty) => void;
   getKeyframesForItem: (itemId: string) => ItemKeyframes | undefined;
   hasKeyframesAtFrame: (itemId: string, property: AnimatableProperty, frame: number) => boolean;
+  repairLegacyAvTracks: () => Promise<boolean>;
   saveTimeline: (projectId: string) => Promise<void>;
   loadTimeline: (projectId: string) => Promise<void>;
   clearTimeline: () => void;

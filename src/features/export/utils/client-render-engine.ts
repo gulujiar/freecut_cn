@@ -40,7 +40,7 @@ import {
 } from './canvas-effects';
 import { EffectsPipeline } from '@/infrastructure/gpu/effects';
 import { TransitionPipeline } from '@/infrastructure/gpu/transitions';
-import { CompositorPipeline, DEFAULT_LAYER_PARAMS } from '@/infrastructure/gpu/compositor';
+import { CompositorPipeline, DEFAULT_LAYER_PARAMS, GpuTexturePool } from '@/infrastructure/gpu/compositor';
 import type { CompositeLayer } from '@/infrastructure/gpu/compositor';
 import { MaskTextureManager } from '@/infrastructure/gpu/masks';
 import {
@@ -63,7 +63,7 @@ import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 // Item renderer
 import {
   type PreviewPathVerticesOverride,
-  resolveFrameCompositionScene,
+  resolveFrameCompositionSceneCached,
   resolveCompositionRenderPlan,
   collectFrameVideoCandidates,
   resolveFrameRenderScene,
@@ -81,7 +81,7 @@ import { ScrubbingCache } from '@/features/export/deps/preview';
 // Re-export orchestration functions so existing import sites keep working
 export { renderComposition, renderAudioOnly, renderSingleFrame } from './canvas-render-orchestrator';
 
-const log = createLogger('ClientRenderEngine');
+function getLog() { return createLogger('ClientRenderEngine'); }
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -209,6 +209,7 @@ export async function createCompositionRenderer(
   // === GPU Compositor (for pixel-perfect blend modes) ===
   // Lazily created from the effects pipeline's GPU device
   let gpuCompositor: CompositorPipeline | null = null;
+  let gpuTexturePool: GpuTexturePool | null = null;
   let gpuMaskManager: MaskTextureManager | null = null;
   let gpuCompositeCanvas: OffscreenCanvas | null = null;
   let gpuCompositeCtx: GPUCanvasContext | null = null;
@@ -221,6 +222,7 @@ export async function createCompositionRenderer(
     if (!gpuPipeline) return false;
     const device = gpuPipeline.getDevice();
     gpuCompositor = new CompositorPipeline(device);
+    gpuTexturePool = new GpuTexturePool(device);
     gpuMaskManager = new MaskTextureManager(device);
     return true;
   }
@@ -275,6 +277,7 @@ export async function createCompositionRenderer(
   const videoExtractors = new Map<string, VideoFrameSource>();
   const videoSourceByItemId = new Map<string, string>();
   const videoItemIdsBySource = new Map<string, Set<string>>();
+  const videoItemsById = new Map<string, VideoItem>();
   // Keep video elements as fallback if mediabunny fails
   const videoElements = new Map<string, HTMLVideoElement>();
   const fallbackVideoPool = hasDom && !previewStrictDecode ? new VideoSourcePool() : null;
@@ -332,8 +335,9 @@ export async function createCompositionRenderer(
     for (const item of track.items ?? []) {
       if (item.type === 'video') {
         const videoItem = item as VideoItem;
+        videoItemsById.set(item.id, videoItem);
         if (videoItem.src) {
-          log.debug('Registering shared video extractor', {
+          getLog().debug('Registering shared video extractor', {
             itemId: item.id,
             src: videoItem.src.substring(0, 80),
           });
@@ -591,8 +595,12 @@ export async function createCompositionRenderer(
   // Wire up pre-decoded bitmap cache from the decoder prewarm worker.
   // Import eagerly so it's available before the first render.
   if (renderMode === 'preview') {
-    void import('@/features/export/deps/preview-contract').then(({ getCachedPredecodedBitmap }) => {
+    void import('@/features/export/deps/preview-contract').then(({
+      getCachedPredecodedBitmap,
+      waitForInflightPredecodedBitmap,
+    }) => {
       itemRenderContext.getCachedPredecodedBitmap = getCachedPredecodedBitmap;
+      itemRenderContext.waitForInflightPredecodedBitmap = waitForInflightPredecodedBitmap;
     }).catch(() => {});
   }
 
@@ -628,7 +636,7 @@ export async function createCompositionRenderer(
         ? []
         : collectPriorityVideoItemIds(priorityFrame, priorityWindowFrames);
 
-      log.debug('Preloading media', {
+      getLog().debug('Preloading media', {
         videoCount: videoExtractors.size,
         videoSourceCount: new Set(videoSourceByItemId.values()).size,
         imageCount: imageElements.size,
@@ -653,7 +661,7 @@ export async function createCompositionRenderer(
         await initializeMediabunnyForItems(remainingMainVideoIds);
       }
 
-      log.info('Video initialization complete', {
+      getLog().info('Video initialization complete', {
         mediabunny: useMediabunny.size,
         fallback: videoExtractors.size - useMediabunny.size,
         uniqueSources: new Set(videoSourceByItemId.values()).size,
@@ -683,7 +691,7 @@ export async function createCompositionRenderer(
         const videoLoadPromises = Array.from(uniqueVideoEntries.entries()).map(
           ([video, itemId]) => new Promise<void>((resolve) => {
             const timeout = setTimeout(() => {
-              log.warn('Video load timeout', { itemId });
+              getLog().warn('Video load timeout', { itemId });
               resolve();
             }, 10000);
 
@@ -697,7 +705,7 @@ export async function createCompositionRenderer(
               }, { once: true });
               video.addEventListener('error', () => {
                 clearTimeout(timeout);
-                log.error('Video load error', { itemId });
+                getLog().error('Video load error', { itemId });
                 resolve();
               }, { once: true });
               video.load();
@@ -710,7 +718,7 @@ export async function createCompositionRenderer(
 
       // Load GIF frames for animated GIFs (main thread only)
       if (hasDom && gifItems.length > 0) {
-        log.debug('Preloading GIF frames', { gifCount: gifItems.length });
+        getLog().debug('Preloading GIF frames', { gifCount: gifItems.length });
 
         const gifLoadPromises = gifItems.map(async (gifItem) => {
           try {
@@ -718,37 +726,37 @@ export async function createCompositionRenderer(
             const mediaId = gifItem.mediaId ?? gifItem.id;
             const cachedFrames = await gifFrameCache.getGifFrames(mediaId, gifItem.src);
             gifFramesMap.set(gifItem.id, cachedFrames);
-            log.debug('GIF frames loaded', {
+            getLog().debug('GIF frames loaded', {
               itemId: gifItem.id.substring(0, 8),
               frameCount: cachedFrames.frames.length,
               totalDuration: cachedFrames.totalDuration,
             });
           } catch (err) {
-            log.error('Failed to load GIF frames', { itemId: gifItem.id, error: err });
+            getLog().error('Failed to load GIF frames', { itemId: gifItem.id, error: err });
             // GIF will fallback to static image rendering
           }
         });
 
         await Promise.all(gifLoadPromises);
-        log.debug('All GIF frames loaded', { loadedCount: gifFramesMap.size });
+        getLog().debug('All GIF frames loaded', { loadedCount: gifFramesMap.size });
       }
 
       // Load animated WebP frames via cache service (main thread only)
       if (hasDom && webpItems.length > 0) {
-        log.debug('Preloading animated WebP frames', { webpCount: webpItems.length });
+        getLog().debug('Preloading animated WebP frames', { webpCount: webpItems.length });
 
         const webpLoadPromises = webpItems.map(async (webpItem) => {
           try {
             const mediaId = webpItem.mediaId ?? webpItem.id;
             const cachedFrames = await gifFrameCache.getWebpFrames(mediaId, webpItem.src);
             gifFramesMap.set(webpItem.id, cachedFrames);
-            log.debug('Animated WebP frames loaded', {
+            getLog().debug('Animated WebP frames loaded', {
               itemId: webpItem.id.substring(0, 8),
               frameCount: cachedFrames.frames.length,
               totalDuration: cachedFrames.totalDuration,
             });
           } catch (err) {
-            log.error('Failed to load WebP frames', { itemId: webpItem.id, error: err });
+            getLog().error('Failed to load WebP frames', { itemId: webpItem.id, error: err });
             // WebP will fallback to static image rendering
           }
         });
@@ -768,7 +776,7 @@ export async function createCompositionRenderer(
         for (const item of track.items ?? []) {
           if (item.type !== 'composition') continue;
           const compItem = item as CompositionItem;
-          log.info('Found composition item in export tracks', {
+          getLog().info('Found composition item in export tracks', {
             itemId: compItem.id.substring(0, 8),
             compositionId: compItem.compositionId.substring(0, 8),
             from: compItem.from,
@@ -776,14 +784,14 @@ export async function createCompositionRenderer(
           });
           const subComp = useCompositionsStore.getState().getComposition(compItem.compositionId);
           if (!subComp) {
-            log.warn('Sub-composition not found in store!', {
+            getLog().warn('Sub-composition not found in store!', {
               compositionId: compItem.compositionId,
               storeCompositionCount: useCompositionsStore.getState().compositions.length,
               storeCompositionIds: useCompositionsStore.getState().compositions.map(c => c.id.substring(0, 8)),
             });
             continue;
           }
-          log.info('Sub-composition loaded', {
+          getLog().info('Sub-composition loaded', {
             compositionId: subComp.id.substring(0, 8),
             name: subComp.name,
             items: subComp.items.length,
@@ -853,7 +861,7 @@ export async function createCompositionRenderer(
 
       // Resolve pending sub-comp URLs from OPFS in parallel
       if (pendingResolutions.length > 0) {
-        log.debug('Resolving sub-comp media URLs from OPFS', { count: pendingResolutions.length });
+        getLog().debug('Resolving sub-comp media URLs from OPFS', { count: pendingResolutions.length });
         const resolved = await Promise.all(
           pendingResolutions.map(async ({ subItem, mediaId }) => {
             const src = await resolveMediaUrl(mediaId);
@@ -866,7 +874,7 @@ export async function createCompositionRenderer(
       }
 
       if (subCompMediaItems.length > 0) {
-        log.debug('Preloading sub-composition media', { count: subCompMediaItems.length });
+        getLog().debug('Preloading sub-composition media', { count: subCompMediaItems.length });
 
         // Preload sub-comp video extractors
         const subVideoItemIds: string[] = [];
@@ -912,7 +920,7 @@ export async function createCompositionRenderer(
             const subVideoLoadPromises = Array.from(uniqueSubVideos.entries()).map(([video, itemId]) =>
               new Promise<void>((resolve) => {
                 const timeout = setTimeout(() => {
-                  log.warn('Sub-comp video load timeout', { itemId });
+                  getLog().warn('Sub-comp video load timeout', { itemId });
                   resolve();
                 }, 10000);
 
@@ -926,7 +934,7 @@ export async function createCompositionRenderer(
                   }, { once: true });
                   video.addEventListener('error', () => {
                     clearTimeout(timeout);
-                    log.error('Sub-comp video load error', { itemId });
+                    getLog().error('Sub-comp video load error', { itemId });
                     resolve();
                   }, { once: true });
                   video.load();
@@ -968,7 +976,7 @@ export async function createCompositionRenderer(
                   resolve();
                 };
                 img.onerror = () => {
-                  log.error('Failed to load sub-comp image', { itemId: subItem.id });
+                  getLog().error('Failed to load sub-comp image', { itemId: subItem.id });
                   resolve();
                 };
               }));
@@ -980,7 +988,7 @@ export async function createCompositionRenderer(
                 }
                 const response = await fetch(src);
                 if (!response.ok) {
-                  log.error('Failed to fetch sub-comp image', { itemId: subItem.id });
+                  getLog().error('Failed to fetch sub-comp image', { itemId: subItem.id });
                   return;
                 }
                 const blob = await response.blob();
@@ -1003,12 +1011,12 @@ export async function createCompositionRenderer(
               const mediaId = gifItem.mediaId ?? gifItem.id;
               const cachedFrames = await gifFrameCache.getGifFrames(mediaId, gifItem.src);
               gifFramesMap.set(gifItem.id, cachedFrames);
-              log.debug('Sub-comp GIF frames loaded', {
+              getLog().debug('Sub-comp GIF frames loaded', {
                 itemId: gifItem.id.substring(0, 8),
                 frameCount: cachedFrames.frames.length,
               });
             } catch (err) {
-              log.error('Failed to load sub-comp GIF frames', { itemId: gifItem.id, error: err });
+              getLog().error('Failed to load sub-comp GIF frames', { itemId: gifItem.id, error: err });
             }
           });
           await Promise.all(subGifPromises);
@@ -1021,18 +1029,18 @@ export async function createCompositionRenderer(
               const mediaId = webpItem.mediaId ?? webpItem.id;
               const cachedFrames = await gifFrameCache.getWebpFrames(mediaId, webpItem.src);
               gifFramesMap.set(webpItem.id, cachedFrames);
-              log.debug('Sub-comp animated WebP frames loaded', {
+              getLog().debug('Sub-comp animated WebP frames loaded', {
                 itemId: webpItem.id.substring(0, 8),
                 frameCount: cachedFrames.frames.length,
               });
             } catch (err) {
-              log.error('Failed to load sub-comp WebP frames', { itemId: webpItem.id, error: err });
+              getLog().error('Failed to load sub-comp WebP frames', { itemId: webpItem.id, error: err });
             }
           });
           await Promise.all(subWebpPromises);
         }
 
-        log.debug('Sub-composition media loaded', {
+        getLog().debug('Sub-composition media loaded', {
           videos: subCompMediaItems.filter(s => s.subItem.type === 'video').length,
           images: subCompMediaItems.filter(s => s.subItem.type === 'image').length,
           gifs: subGifItems.length,
@@ -1040,7 +1048,7 @@ export async function createCompositionRenderer(
         });
       }
 
-      log.debug('All media loaded');
+      getLog().debug('All media loaded');
     },
 
     async renderFrame(frame: number) {
@@ -1069,7 +1077,7 @@ export async function createCompositionRenderer(
         renderMode === 'preview' ? getPreviewPathVerticesOverride : undefined,
       );
 
-      const frameScene = resolveFrameCompositionScene({
+      const frameScene = resolveFrameCompositionSceneCached({
         renderPlan,
         frame,
         canvas: canvasSettings,
@@ -1081,13 +1089,13 @@ export async function createCompositionRenderer(
 
       // Debug: Log transition state at key frames (only in development)
       if (import.meta.env.DEV && activeTransitions.length > 0 && (frame === activeTransitions[0]?.transitionStart || frame % 30 === 0)) {
-        log.info(`TRANSITION STATE: frame=${frame} activeTransitions=${activeTransitions.length} skippedClipIds=${Array.from(transitionClipIds).map(id => id.substring(0,8)).join(',')}`);
+        getLog().info(`TRANSITION STATE: frame=${frame} activeTransitions=${activeTransitions.length} skippedClipIds=${Array.from(transitionClipIds).map(id => id.substring(0,8)).join(',')}`);
       }
 
 
       // Log periodically (only in development)
       if (import.meta.env.DEV && frame % 30 === 0) {
-        log.debug('Rendering frame', {
+        getLog().debug('Rendering frame', {
           frame,
           tracksCount: sortedTracks.length,
           activeMasks: activeMasks.length,
@@ -1204,7 +1212,7 @@ export async function createCompositionRenderer(
           if (hasGpu && !itemRenderContext.gpuPipeline) {
             itemRenderContext.gpuPipeline = await ensureGpuPipeline();
             if (!itemRenderContext.gpuPipeline) {
-              log.warn('GPU pipeline init failed — GPU effects will be skipped');
+              getLog().warn('GPU pipeline init failed — GPU effects will be skipped');
             }
           }
           const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
@@ -1344,7 +1352,7 @@ export async function createCompositionRenderer(
           .flatMap((track) => track.items ?? [])
           .find((item) => shouldRenderItem(item) && isFullyOccluding(item, occlusionCutoffOrder));
         if (occludingTask) {
-          log.debug(`Occlusion culling: item ${occludingTask.id.substring(0, 8)} on track order ${occlusionCutoffOrder} fully occludes canvas`);
+          getLog().debug(`Occlusion culling: item ${occludingTask.id.substring(0, 8)} on track order ${occlusionCutoffOrder} fully occludes canvas`);
         }
       }
 
@@ -1432,12 +1440,8 @@ export async function createCompositionRenderer(
 
             const blendMode = task.type === 'item' ? (task.item.blendMode ?? 'normal') : 'normal';
 
-            // Upload item canvas to GPU texture
-            const tex = device.createTexture({
-              size: [w, h],
-              format: 'rgba8unorm',
-              usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
-            });
+            // Upload item canvas to GPU texture (pooled — no per-frame alloc)
+            const tex = gpuTexturePool!.acquire(w, h);
             device.queue.copyExternalImageToTexture(
               { source: result.source, flipY: false },
               { texture: tex },
@@ -1479,8 +1483,8 @@ export async function createCompositionRenderer(
             for (const c of result.poolCanvases) canvasPool.release(c);
           }
 
-          // Destroy per-frame textures
-          for (const tex of layerTextures) tex.destroy();
+          // Release pooled textures (no GPU destroy — recycled next frame)
+          for (const tex of layerTextures) gpuTexturePool!.release(tex);
         } else {
           // Canvas2D compositing fallback
           for (let i = 0; i < results.length; i++) {
@@ -1506,7 +1510,7 @@ export async function createCompositionRenderer(
 
       // Log occlusion culling stats periodically (only in development)
       if (import.meta.env.DEV && skippedTracks > 0 && frame % 30 === 0) {
-        log.debug(`Occlusion culling: skipped ${skippedTracks} tracks at frame ${frame}`);
+        getLog().debug(`Occlusion culling: skipped ${skippedTracks} tracks at frame ${frame}`);
       }
 
       ctx.drawImage(finalCompositeSource, 0, 0);
@@ -1514,23 +1518,22 @@ export async function createCompositionRenderer(
       // Release content canvas back to pool
       canvasPool.release(contentCanvas);
 
-      // Cache the rendered frame into Tier 1 (GPU) + Tier 3 (RAM).
-      // Skip during rapid forward skimming (frame = last+1..+3) — mediabunny
-      // sequential decode is ~1ms/frame, faster than cache write overhead.
-      // Cache on backward seeks (mediabunny stream restart = seconds), jumps,
-      // and non-sequential access where the cache actually helps.
-      // Tier 1 uploads from canvas synchronously (<1ms). Tier 3 bitmap
-      // creation runs in the background asynchronously.
+      // Cache the rendered frame. Tier 1 (GPU) is always populated because
+      // copyExternalImageToTexture is near-free (<0.5ms CPU, GPU-async).
+      // Tier 3 (RAM) uses createImageBitmap (~2-5ms) — skip during rapid
+      // forward playback where mediabunny sequential decode is faster (~1ms).
+      //
+      // Always caching to Tier 1 means backward scrubs after forward playback
+      // get GPU cache hits instead of full WASM re-decodes (50-200ms saved
+      // per frame on long-GOP video).
       if (scrubbingCache) {
         const delta = frame - lastRenderedFrame;
         const isSequentialForward = delta > 0 && delta <= 3;
         lastRenderedFrame = frame;
-        if (!isSequentialForward) {
-          if (gpuPipeline) {
-            scrubbingCache.setGpuDevice(gpuPipeline.getDevice(), canvas.width, canvas.height);
-          }
-          scrubbingCache.cacheFrame(frame, canvas);
+        if (gpuPipeline) {
+          scrubbingCache.setGpuDevice(gpuPipeline.getDevice(), canvas.width, canvas.height);
         }
+        scrubbingCache.cacheFrame(frame, canvas, isSequentialForward);
       }
     },
 
@@ -1596,11 +1599,117 @@ export async function createCompositionRenderer(
           if (error instanceof DOMException && error.name === 'AbortError') continue;
           const failures = (mediabunnyFailureCountByItem.get(item.id) ?? 0) + 1;
           mediabunnyFailureCountByItem.set(item.id, failures);
-          log.warn('Prewarm decode failed', { itemId: item.id, frame, failures, error });
+          getLog().warn('Prewarm decode failed', { itemId: item.id, frame, failures, error });
           if (failures >= PREWARM_FAILURE_DISABLE_THRESHOLD) {
             mediabunnyDisabledItems.add(item.id);
             useMediabunny.delete(item.id);
           }
+        }
+      }
+    },
+
+    /**
+     * Batch-prewarm multiple frames using mediabunny's samplesAtTimestamps()
+     * pipeline. Groups source timestamps by extractor and decodes each packet
+     * at most once across the batch.
+     *
+     * Falls back to sequential prewarmFrame() for extractors where batch mode
+     * has been disabled (e.g. due to "key frame required after flush" errors).
+     *
+     * @returns Number of frames that used batch path (vs fallback).
+     */
+    async prewarmFrames(frames: number[]) {
+      if (frames.length === 0) return;
+      const ctx2d = getPrewarmContext();
+      if (!ctx2d) return;
+
+      // Expand frames → candidate items → source timestamps grouped by extractor
+      const batchByExtractor = new Map<string, { extractor: ReturnType<typeof videoExtractors.get>; timestamps: number[] }>();
+      const fallbackFrames: number[] = [];
+
+      for (const frame of frames) {
+        const minFrame = frame - 1;
+        const maxFrame = frame + 1;
+        const candidates = collectFrameVideoCandidates({
+          tracksByOrderAsc: tracksTopToBottom,
+          visibleTrackIds,
+          minFrame,
+          maxFrame,
+          maxItems: PREWARM_DECODE_MAX_ITEMS,
+        });
+
+        for (const item of candidates) {
+          if (!useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id)) continue;
+          const extractor = videoExtractors.get(item.id);
+          if (!extractor) continue;
+
+          // Check if batch mode is available for this extractor
+          if (!extractor.isBatchPrewarmAvailable()) {
+            if (!fallbackFrames.includes(frame)) fallbackFrames.push(frame);
+            continue;
+          }
+
+          const localFrame = frame - item.from;
+          const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+          const sourceFps = item.sourceFps ?? fps;
+          const speed = item.speed ?? 1;
+          const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+          const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
+
+          const existing = batchByExtractor.get(item.id);
+          if (existing) {
+            existing.timestamps.push(clampedTime);
+          } else {
+            batchByExtractor.set(item.id, { extractor, timestamps: [clampedTime] });
+          }
+        }
+      }
+
+      // Initialize any missing extractors
+      const missingIds = [...batchByExtractor.keys()].filter(
+        (id) => !useMediabunny.has(id) && !mediabunnyDisabledItems.has(id),
+      );
+      if (missingIds.length > 0) {
+        await initializeMediabunnyForItems(missingIds);
+      }
+
+      // Batch decode per extractor — sorted timestamps for optimal pipeline
+      await Promise.all([...batchByExtractor.entries()].map(async ([itemId, { extractor, timestamps }]) => {
+        if (isDisposed || !extractor) return;
+        timestamps.sort((a, b) => a - b);
+        const result = await extractor.prewarmBatch(ctx2d, timestamps, 0, 0, 1, 1);
+        if (result >= 0) {
+          mediabunnyFailureCountByItem.set(itemId, 0);
+        }
+        // result === -1 means batch disabled or failed — fallback frames
+        // are handled below
+      }));
+
+      // Sequential fallback for extractors where batch is disabled
+      for (const frame of fallbackFrames) {
+        if (isDisposed) break;
+        const minFrame = frame - 1;
+        const maxFrame = frame + 1;
+        const candidates = collectFrameVideoCandidates({
+          tracksByOrderAsc: tracksTopToBottom,
+          visibleTrackIds,
+          minFrame,
+          maxFrame,
+          maxItems: PREWARM_DECODE_MAX_ITEMS,
+        });
+        for (const item of candidates) {
+          if (!useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id)) continue;
+          const extractor = videoExtractors.get(item.id);
+          if (!extractor) continue;
+          const localFrame = frame - item.from;
+          const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
+          const sourceFps = item.sourceFps ?? fps;
+          const speed = item.speed ?? 1;
+          const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+          const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
+          try {
+            await extractor.drawFrame(ctx2d, clampedTime, 0, 0, 1, 1);
+          } catch { /* best-effort fallback */ }
         }
       }
     },
@@ -1629,6 +1738,10 @@ export async function createCompositionRenderer(
       }
       // Seek decoders to the target frame position using a 1x1 draw.
       // Run all clips in parallel — each has its own decoder lane.
+      // NOTE: localFrame may be negative for incoming transition clips whose
+      // timeline `from` is after targetFrame — the transition renderer will
+      // still render them. We allow negative localFrame and clamp sourceTime
+      // to zero so the decoder is positioned at the clip's start.
       if (targetFrame !== undefined) {
         const ctx2d = getPrewarmContext();
         if (!ctx2d) return;
@@ -1636,10 +1749,10 @@ export async function createCompositionRenderer(
           if (isDisposed) return;
           const extractor = videoExtractors.get(itemId);
           if (!extractor || !useMediabunny.has(itemId)) return;
-          const item = sortedTracks.flatMap((t) => t.items ?? []).find((i) => i.id === itemId);
+          const item = videoItemsById.get(itemId);
           if (!item || item.type !== 'video') return;
           const localFrame = targetFrame - item.from;
-          if (localFrame < 0 || localFrame >= item.durationInFrames) return;
+          if (localFrame >= item.durationInFrames) return;
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
           const sourceFps = item.sourceFps ?? fps;
           const speed = item.speed ?? 1;
@@ -1695,6 +1808,7 @@ export async function createCompositionRenderer(
       videoExtractors.clear();
       videoSourceByItemId.clear();
       videoItemIdsBySource.clear();
+      videoItemsById.clear();
       useMediabunny.clear();
       mediabunnyFailureCountByItem.clear();
       mediabunnyInitFailureCountByItem.clear();
@@ -1729,6 +1843,8 @@ export async function createCompositionRenderer(
 
       gpuCompositor?.destroy();
       gpuCompositor = null;
+      gpuTexturePool?.destroy();
+      gpuTexturePool = null;
       gpuMaskManager?.destroy();
       gpuMaskManager = null;
       gpuCompositeCtx = null;
@@ -1745,7 +1861,7 @@ export async function createCompositionRenderer(
 
       // Log pool stats in development
       if (import.meta.env.DEV) {
-        log.debug('Canvas pool disposed', canvasPool.getStats());
+        getLog().debug('Canvas pool disposed', canvasPool.getStats());
       }
     },
   };
