@@ -70,6 +70,10 @@ export const ZOOM_MIN_VELOCITY = 0.001;
 export const ZOOM_MIN = MIN_ZOOM_LEVEL;
 export const ZOOM_MAX = MAX_ZOOM_LEVEL;
 
+// Temporary gate: keep slip/slide implementation in code, but hide the UI and
+// disable their keyboard shortcuts until the tools are ready to expose again.
+export const SLIP_SLIDE_TOOLS_ENABLED = false;
+
 // =============================================================================
 // COLORS
 // =============================================================================

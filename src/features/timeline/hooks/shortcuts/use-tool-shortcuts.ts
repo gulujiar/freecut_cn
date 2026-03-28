@@ -1,5 +1,5 @@
 /**
- * Tool shortcuts: V (Select), T (Trim Edit), C (Razor), Shift+C (Split at cursor), R (Rate Stretch), Y (Slip), U (Slide).
+ * Tool shortcuts: V (Select), T (Trim Edit), C (Razor), Shift+C (Split at cursor), R (Rate Stretch).
  */
 
 import { useHotkeys } from 'react-hotkeys-hook';
@@ -9,6 +9,7 @@ import { useSelectionStore } from '@/shared/state/selection';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
+import { SLIP_SLIDE_TOOLS_ENABLED } from '../../constants';
 
 export function useToolShortcuts(callbacks: TimelineShortcutCallbacks) {
   const hotkeys = useResolvedHotkeys();
@@ -90,7 +91,7 @@ export function useToolShortcuts(callbacks: TimelineShortcutCallbacks) {
       event.preventDefault();
       setActiveTool(activeTool === 'slip' ? 'select' : 'slip');
     },
-    HOTKEY_OPTIONS,
+    { ...HOTKEY_OPTIONS, enabled: SLIP_SLIDE_TOOLS_ENABLED },
     [activeTool, setActiveTool]
   );
 
@@ -101,7 +102,7 @@ export function useToolShortcuts(callbacks: TimelineShortcutCallbacks) {
       event.preventDefault();
       setActiveTool(activeTool === 'slide' ? 'select' : 'slide');
     },
-    HOTKEY_OPTIONS,
+    { ...HOTKEY_OPTIONS, enabled: SLIP_SLIDE_TOOLS_ENABLED },
     [activeTool, setActiveTool]
   );
 }

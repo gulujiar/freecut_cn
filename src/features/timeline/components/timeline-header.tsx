@@ -40,6 +40,7 @@ import {
   ZOOM_MIN_VELOCITY,
   ZOOM_MIN,
   ZOOM_MAX,
+  SLIP_SLIDE_TOOLS_ENABLED,
 } from '../constants';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
@@ -322,39 +323,41 @@ export const TimelineHeader = memo(function TimelineHeader({
             <Gauge className="w-3.5 h-3.5" />
           </Button>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                className={`h-7 gap-1 px-2 ${
-                  activeTool === 'slip' || activeTool === 'slide'
-                    ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                    : ''
-                }`}
-                aria-label="Slip and slide tools"
-                data-tooltip="Slip / Slide Tools"
-              >
-                <span className="flex items-center gap-1">
-                  <span className="inline-flex items-center justify-center">
-                    <SlipSlideFlyoutIcon className="w-3.5 h-3.5" />
+          {SLIP_SLIDE_TOOLS_ENABLED ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  className={`h-7 gap-1 px-2 ${
+                    activeTool === 'slip' || activeTool === 'slide'
+                      ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                      : ''
+                  }`}
+                  aria-label="Slip and slide tools"
+                  data-tooltip="Slip / Slide Tools"
+                >
+                  <span className="flex items-center gap-1">
+                    <span className="inline-flex items-center justify-center">
+                      <SlipSlideFlyoutIcon className="w-3.5 h-3.5" />
+                    </span>
+                    <ChevronDown className="w-3 h-3 opacity-70" />
                   </span>
-                  <ChevronDown className="w-3 h-3 opacity-70" />
-                </span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => setActiveTool(activeTool === 'slip' ? 'select' : 'slip')}>
-                <ArrowRightLeft className="w-3.5 h-3.5" />
-                <span className="flex-1">Slip tool</span>
-                <span className="text-xs text-muted-foreground">{formatHotkeyBinding(hotkeys.SLIP_TOOL)}</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setActiveTool(activeTool === 'slide' ? 'select' : 'slide')}>
-                <BetweenHorizontalEnd className="w-3.5 h-3.5" />
-                <span className="flex-1">Slide tool</span>
-                <span className="text-xs text-muted-foreground">{formatHotkeyBinding(hotkeys.SLIDE_TOOL)}</span>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => setActiveTool(activeTool === 'slip' ? 'select' : 'slip')}>
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  <span className="flex-1">Slip tool</span>
+                  <span className="text-xs text-muted-foreground">{formatHotkeyBinding(hotkeys.SLIP_TOOL)}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveTool(activeTool === 'slide' ? 'select' : 'slide')}>
+                  <BetweenHorizontalEnd className="w-3.5 h-3.5" />
+                  <span className="flex-1">Slide tool</span>
+                  <span className="text-xs text-muted-foreground">{formatHotkeyBinding(hotkeys.SLIDE_TOOL)}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null}
         </div>
 
         <Separator orientation="vertical" className="h-5 mx-1.5" />
