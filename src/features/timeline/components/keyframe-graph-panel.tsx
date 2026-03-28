@@ -1,13 +1,13 @@
 ﻿/**
  * Keyframe Graph Panel Component
  *
- * Collapsible panel that shows the value graph editor for selected items.
+ * Panel that shows the value graph editor for selected items.
  * Integrates with the timeline to provide visual keyframe editing.
  */
 
 import { memo, useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
-import { ChevronUp, ChevronDown, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useShallow } from 'zustand/react/shallow';
 import { cn } from '@/shared/ui/cn';
@@ -83,8 +83,8 @@ const MAX_PARENT_RATIO = 0.8;
 interface KeyframeGraphPanelProps {
   /** Whether the panel is open */
   isOpen: boolean;
-  /** Callback to toggle panel visibility */
-  onToggle: () => void;
+  /** Deprecated: panel no longer collapses from the header */
+  onToggle?: () => void;
   /** Callback to close the panel */
   onClose: () => void;
   /** Where the panel is docked in the layout */
@@ -221,13 +221,12 @@ function loadKeyframeEditorMode(): KeyframeEditorMode {
 }
 
 /**
- * Collapsible panel showing the keyframe value graph editor.
+ * Panel showing the keyframe value graph editor.
  * Displays graph for the first selected item that has keyframes.
  * Automatically uses full width of container.
  */
 export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   isOpen,
-  onToggle,
   onClose,
   placement = 'bottom',
 }: KeyframeGraphPanelProps) {
@@ -1232,13 +1231,9 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
 
       {/* Header bar - always visible */}
       <div
-        className="h-8 flex items-center justify-between px-3 bg-secondary/30 border-b border-border cursor-pointer hover:bg-secondary/50"
-        onClick={onToggle}
+        className="h-8 flex items-center justify-between px-3 bg-secondary/30 border-b border-border"
       >
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" className="h-5 w-5 p-0">
-            {isOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-          </Button>
           <span className="text-xs font-medium text-muted-foreground">
             Keyframe Editor
             {selectedItemForEditor && (
