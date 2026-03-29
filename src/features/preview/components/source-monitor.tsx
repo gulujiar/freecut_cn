@@ -30,6 +30,8 @@ interface SourceMonitorProps {
   onClose: () => void;
 }
 
+const SOURCE_MONITOR_RESIZE_MIN_UPDATE_MS = 33;
+
 export const SourceMonitor = memo(function SourceMonitor({ mediaId, onClose }: SourceMonitorProps) {
   const [blobUrl, setBlobUrl] = useState<string>('');
   const media = useMediaLibraryStore((s) => s.mediaItems.find((m) => m.id === mediaId));
@@ -134,6 +136,11 @@ function SourceMonitorInner({
   const containerRef = useRef<HTMLDivElement>(null);
   const contentHostRef = useRef<HTMLDivElement>(null);
   const contentScaleRef = useRef<HTMLDivElement>(null);
+  const lastLayoutRef = useRef<{
+    scaledWidth: number;
+    scaledHeight: number;
+    scale: number;
+  } | null>(null);
   const editorDensity = useSettingsStore((s) => s.editorDensity);
   const editorLayout = getEditorLayout(editorDensity);
 
@@ -152,6 +159,22 @@ function SourceMonitorInner({
     const sw = mediaWidth * scale;
     const sh = mediaHeight * scale;
 
+    const previousLayout = lastLayoutRef.current;
+    if (
+      previousLayout
+      && previousLayout.scaledWidth === sw
+      && previousLayout.scaledHeight === sh
+      && previousLayout.scale === scale
+    ) {
+      return;
+    }
+
+    lastLayoutRef.current = {
+      scaledWidth: sw,
+      scaledHeight: sh,
+      scale,
+    };
+
     host.style.width = `${sw}px`;
     host.style.height = `${sh}px`;
     host.style.marginLeft = `${-sw / 2}px`;
@@ -166,10 +189,22 @@ function SourceMonitorInner({
     const el = containerRef.current;
     if (!el) return;
     let rafId: number | null = null;
+    let lastUpdateTs = 0;
     const schedule = () => {
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
+        const now = performance.now();
+        if (now - lastUpdateTs < SOURCE_MONITOR_RESIZE_MIN_UPDATE_MS) {
+          rafId = requestAnimationFrame(() => {
+            rafId = null;
+            lastUpdateTs = performance.now();
+            updateLayout();
+          });
+          return;
+        }
+
         rafId = null;
+        lastUpdateTs = now;
         updateLayout();
       });
     };
