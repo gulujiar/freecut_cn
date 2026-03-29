@@ -356,20 +356,19 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     });
   }, [combinedTracks, mixerSourceTracks, panelMode, playbackGain, sources, waveformsByMediaId]);
 
-  // Mutate track volume in place — avoids setTracks() which triggers an
-  // expensive composition re-render cascade.  Live gains keep audio correct.
-  // The mutation persists on save (markDirty triggers autosave).
-  // The composition picks up the new volume on its next natural re-render.
+  // Proper store update for undo/redo support.
+  // Live gains stay active to keep audio correct during the composition re-render.
+  // Audio components auto-clear live gains via useEffect when they receive the updated volume prop.
   const handleTrackVolumeChange = useCallback((trackId: string, volumeDb: number) => {
     if (!Number.isFinite(volumeDb)) return;
     const currentTracks = useItemsStore.getState().tracks;
-    for (const track of currentTracks) {
-      if (track.id === trackId) {
-        (track as { volume: number }).volume = volumeDb;
-      } else if (!Number.isFinite(track.volume)) {
-        (track as { volume: number }).volume = 0;
-      }
-    }
+    useItemsStore.getState().setTracks(
+      currentTracks.map((track) =>
+        track.id === trackId
+          ? { ...track, volume: volumeDb }
+          : Number.isFinite(track.volume) ? track : { ...track, volume: 0 }
+      ),
+    );
     useTimelineStore.getState().markDirty();
   }, []);
 

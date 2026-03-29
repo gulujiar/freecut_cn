@@ -283,6 +283,12 @@ const ChannelStrip = memo(function ChannelStrip({
 }: ChannelStripProps) {
   const dbReadoutRef = useRef<HTMLDivElement | null>(null);
   const meterDbOffsetRef = useRef(0);
+  // Reset meter offset when the track volume prop updates (store committed)
+  const prevVolumeRef = useRef(track.volume);
+  if (prevVolumeRef.current !== track.volume) {
+    prevVolumeRef.current = track.volume;
+    meterDbOffsetRef.current = 0;
+  }
   const handleMuteClick = useCallback(() => {
     onMuteToggle(track.id);
   }, [onMuteToggle, track.id]);

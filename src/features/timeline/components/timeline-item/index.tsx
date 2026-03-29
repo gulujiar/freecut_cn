@@ -2037,15 +2037,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       const committedVolume = audioVolumeEditRef.current?.previewVolume ?? latestPreviewVolume;
       audioVolumeCleanupRef.current?.();
       audioVolumeCleanupRef.current = null;
-      clearMixerLiveGains();
+      // Keep live gain active — segment volumeDb is stale until composition
+      // naturally re-renders, and the audio component auto-clears via useEffect.
 
       if (Math.abs(committedVolume - originalVolume) > AUDIO_VOLUME_EPSILON) {
         setAudioVolumeEdit((prev) => prev ? { ...prev, isCommitting: true } : prev);
-        // Mutate in place to avoid expensive composition re-render.
-        // Live gain auto-clears when the composition naturally re-renders.
-        (item as { volume: number }).volume = committedVolume;
-        useTimelineStore.getState().markDirty();
+        // Proper store update for undo/redo support
+        updateTimelineItem(item.id, { volume: committedVolume });
       } else {
+        clearMixerLiveGains();
         setAudioVolumeEdit(null);
       }
     };
@@ -2086,7 +2086,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [activeTool, item, trackLocked]);
+  }, [activeTool, item, trackLocked, updateTimelineItem]);
   const handleAudioVolumeDoubleClick = useCallback(() => {
     if (item.type !== 'audio' || trackLocked) {
       return;
