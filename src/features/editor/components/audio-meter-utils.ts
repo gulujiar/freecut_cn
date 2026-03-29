@@ -7,6 +7,7 @@ import {
   isCompositionAudioItem,
 } from '@/shared/utils/linked-media';
 import { timelineToSourceFrames } from '@/features/editor/deps/timeline-utils';
+import { getTrackKind } from '@/features/editor/deps/timeline-utils';
 import {
   buildCompoundAudioTransitionSegments,
   buildStandaloneAudioSegments,
@@ -33,14 +34,19 @@ export type AudioMeterCompositionLookup = Record<string, {
 
 export interface AudioMeterGraphNode {
   fps: number;
-  directSegments: Array<AudioSegment | VideoAudioSegment>;
+  directSegments: Array<{
+    segment: AudioSegment | VideoAudioSegment;
+    trackId: string;
+  }>;
   compoundSegments: Array<{
     segment: CompoundAudioSegment;
     compositionId: string;
+    trackId: string;
   }>;
   compositionWrappers: Array<{
     wrapper: EnrichedCompositionAudioItem | EnrichedCompositionItem;
     wrapperGain: number;
+    trackId: string;
   }>;
 }
 
@@ -66,6 +72,7 @@ export interface AudioMeterSource {
   gain: number;
   sourceTimeSeconds: number;
   windowSeconds: number;
+  trackId?: string;
 }
 
 export interface AudioMeterWaveform {
@@ -135,6 +142,7 @@ function appendDirectSegmentSources(params: {
   gainMultiplier: number;
   segments: Array<AudioSegment | VideoAudioSegment>;
   sources: AudioMeterSource[];
+  trackId?: string;
 }): void {
   const { frame, fps, gainMultiplier, segments, sources } = params;
 
@@ -158,6 +166,7 @@ function appendDirectSegmentSources(params: {
         timelineFps: fps,
       }),
       windowSeconds: Math.max(DEFAULT_WINDOW_SECONDS, 1 / Math.max(1, fps)),
+      trackId: params.trackId ?? '',
     });
   }
 }
@@ -481,11 +490,19 @@ function buildAudioMeterGraphNode(params: {
     !isCompositionAudioItem(item) && !managedLinkedAudioIds.has(item.id)
   ));
   const videoAudioItems = renderPlan.videoItems.filter((item) => !hasLinkedAudioCompanion(audioItems, item));
-  const directSegments: Array<AudioSegment | VideoAudioSegment> = [
+  const directTrackIdByItemId = new Map<string, string>([
+    ...standaloneAudioItems.map((item) => [item.id, item.trackId] as const),
+    ...videoAudioItems.map((item) => [item.id, item.trackId] as const),
+    ...managedLinkedAudioItems.map((item) => [item.id, item.trackId] as const),
+  ]);
+  const directSegments = [
     ...buildStandaloneAudioSegments(standaloneAudioItems, fps),
     ...buildTransitionVideoAudioSegments(videoAudioItems, transitions, fps),
     ...buildTransitionVideoAudioSegments(managedLinkedAudioItems, managedLinkedAudioTransitionDefs, fps),
-  ];
+  ].map((segment) => ({
+    segment,
+    trackId: directTrackIdByItemId.get(segment.itemId) ?? '',
+  }));
 
   const compoundAudioItems = audioItems.filter((item): item is EnrichedCompositionAudioItem => isCompositionAudioItem(item));
   const managedCompoundAudioItems = compoundAudioItems.filter((item) => managedLinkedAudioIds.has(item.id));
@@ -513,6 +530,7 @@ function buildAudioMeterGraphNode(params: {
     return [{
       segment,
       compositionId: wrapper.compositionId,
+      trackId: wrapper.trackId,
     }];
   });
 
@@ -522,11 +540,13 @@ function buildAudioMeterGraphNode(params: {
       .map((wrapper) => ({
         wrapper,
         wrapperGain: toLinearGain((wrapper.volume ?? 0) + (wrapper.trackVolumeDb ?? 0)),
+        trackId: wrapper.trackId,
       })),
     ...tracks.flatMap((track) => (
       track.items.flatMap((item): Array<{
         wrapper: EnrichedCompositionItem;
         wrapperGain: number;
+        trackId: string;
       }> => {
         if (item.type !== 'composition') return [];
         if (hasLinkedAudioCompanion(audioItems as TimelineItem[], item)) return [];
@@ -537,6 +557,7 @@ function buildAudioMeterGraphNode(params: {
             trackVisible: visibleTrackIds.has(track.id),
           },
           wrapperGain: 1,
+          trackId: track.id,
         }];
       })
     )),
@@ -557,20 +578,24 @@ function appendAudioMeterSourcesFromGraph(params: {
   gainMultiplier: number;
   depth: number;
   sources: AudioMeterSource[];
+  ownerTrackId?: string;
 }): void {
-  const { graph, graphNode, frame, gainMultiplier, depth, sources } = params;
+  const { graph, graphNode, frame, gainMultiplier, depth, sources, ownerTrackId } = params;
 
   if (gainMultiplier <= 0.0001) {
     return;
   }
 
-  appendDirectSegmentSources({
-    frame,
-    fps: graphNode.fps,
-    gainMultiplier,
-    segments: graphNode.directSegments,
-    sources,
-  });
+  for (const directEntry of graphNode.directSegments) {
+    appendDirectSegmentSources({
+      frame,
+      fps: graphNode.fps,
+      gainMultiplier,
+      segments: [directEntry.segment],
+      sources,
+      trackId: ownerTrackId ?? directEntry.trackId,
+    });
+  }
 
   for (const compoundEntry of graphNode.compoundSegments) {
     const nestedGraph = graph.compositionsById[compoundEntry.compositionId];
@@ -605,6 +630,7 @@ function appendAudioMeterSourcesFromGraph(params: {
       gainMultiplier: gainMultiplier * Math.max(0, toLinearGain(compoundEntry.segment.volumeDb) * crossfadeMultiplier),
       depth: depth + 1,
       sources,
+      ownerTrackId: ownerTrackId ?? compoundEntry.trackId,
     });
   }
 
@@ -639,6 +665,7 @@ function appendAudioMeterSourcesFromGraph(params: {
       gainMultiplier: gainMultiplier * compositionEntry.wrapperGain,
       depth: depth + 1,
       sources,
+      ownerTrackId: ownerTrackId ?? compositionEntry.trackId,
     });
   }
 }
@@ -882,4 +909,56 @@ export const AUDIO_METER_SCALE_MARKS = [-50, -40, -30, -20, -15, -10, -5, 0] as 
 
 export function dbMarkToPercent(mark: number): number {
   return linearLevelToPercent(Math.pow(10, mark / 20));
+}
+
+export function isAudioMixerTrack(track: TimelineTrack): boolean {
+  if (track.isGroup) {
+    return false;
+  }
+
+  const trackKind = getTrackKind(track);
+  if (trackKind === 'video') {
+    return false;
+  }
+  if (trackKind === 'audio') {
+    return true;
+  }
+
+  return track.items.some((item) => item.type === 'audio');
+}
+
+export function estimatePerTrackLevels(params: {
+  tracks: TimelineTrack[];
+  sources: AudioMeterSource[];
+  waveformsByMediaId: ReadonlyMap<string, AudioMeterWaveform | null | undefined>;
+  targetTrackIds?: readonly string[];
+}): Map<string, AudioMeterEstimate> {
+  const result = new Map<string, AudioMeterEstimate>();
+  const targetTrackIds = params.targetTrackIds ? new Set(params.targetTrackIds) : null;
+  const sourcesByTrackId = new Map<string, AudioMeterSource[]>();
+
+  for (const source of params.sources) {
+    if (!source.trackId) continue;
+    const existing = sourcesByTrackId.get(source.trackId);
+    if (existing) {
+      existing.push(source);
+      continue;
+    }
+    sourcesByTrackId.set(source.trackId, [source]);
+  }
+
+  for (const track of params.tracks) {
+    if (track.isGroup) continue;
+    if (targetTrackIds && !targetTrackIds.has(track.id)) continue;
+
+    const trackSources = sourcesByTrackId.get(track.id) ?? [];
+    if (trackSources.length === 0) {
+      result.set(track.id, { left: 0, right: 0, resolvedSourceCount: 0, unresolvedSourceCount: 0 });
+      continue;
+    }
+
+    result.set(track.id, estimateAudioMeterLevel({ sources: trackSources, waveformsByMediaId: params.waveformsByMediaId }));
+  }
+
+  return result;
 }

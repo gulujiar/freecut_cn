@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { AudioItem, TimelineTrack } from '@/types/timeline';
+import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline';
 import {
   compileAudioMeterGraph,
   estimateAudioMeterLevel,
+  estimatePerTrackLevels,
+  isAudioMixerTrack,
   formatMeterDb,
   resolveCompiledAudioMeterSources,
   resolveAudioMeterSources,
@@ -34,6 +36,23 @@ function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
     label: 'Audio',
     src: 'blob:audio',
     mediaId: 'media-audio',
+    sourceStart: 0,
+    sourceFps: 30,
+    volume: 0,
+    ...overrides,
+  };
+}
+
+function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
+  return {
+    id: 'video-1',
+    type: 'video',
+    trackId: 'track-1',
+    from: 0,
+    durationInFrames: 30,
+    label: 'Video',
+    src: 'blob:video',
+    mediaId: 'media-video',
     sourceStart: 0,
     sourceFps: 30,
     volume: 0,
@@ -114,6 +133,139 @@ describe('audio meter utils', () => {
 
     expect(sources).toHaveLength(1);
     expect(sources[0]?.sourceTimeSeconds).toBeCloseTo(1, 5);
+  });
+
+  it('renders legacy audio tracks in the mixer', () => {
+    const track = makeTrack({
+      name: 'Track 2',
+      kind: undefined,
+      items: [makeAudioItem()],
+    });
+
+    expect(isAudioMixerTrack(track)).toBe(true);
+  });
+
+  it('does not render V tracks in the mixer', () => {
+    const track = makeTrack({
+      name: 'V1',
+      kind: undefined,
+      items: [makeVideoItem()],
+    });
+
+    expect(isAudioMixerTrack(track)).toBe(false);
+  });
+
+  it('estimates per-track levels for composition-backed audio tracks', () => {
+    const wrapper = makeAudioItem({
+      id: 'comp-audio',
+      compositionId: 'composition-1',
+      mediaId: undefined,
+      src: '',
+    });
+    const nestedAudio = makeAudioItem({
+      id: 'nested-audio',
+      mediaId: 'nested-media',
+      src: 'blob:nested',
+    });
+    const track = makeTrack({ items: [wrapper] });
+    const graph = compileAudioMeterGraph({
+      tracks: [track],
+      transitions: [],
+      fps: 30,
+      compositionsById: {
+        'composition-1': {
+          id: 'composition-1',
+          fps: 30,
+          transitions: [],
+          tracks: [makeTrack({ items: [nestedAudio] })],
+        },
+      },
+    });
+    const sources = resolveCompiledAudioMeterSources({
+      graph,
+      frame: 15,
+      masterGain: 1,
+    });
+
+    expect(sources[0]?.trackId).toBe('track-1');
+
+    const levels = estimatePerTrackLevels({
+      tracks: [track],
+      sources,
+      waveformsByMediaId: new Map([
+        ['nested-media', {
+          peaks: new Float32Array([1, 0.5, 0.25, 0.1]),
+          sampleRate: 1,
+          channels: 1,
+        }],
+      ]),
+    });
+
+    expect(levels.get('track-1')?.left ?? 0).toBeGreaterThan(0);
+    expect(levels.get('track-1')?.right ?? 0).toBeGreaterThan(0);
+  });
+
+  it('keeps nested composition audio assigned to the parent mixer track', () => {
+    const wrapperTrack = makeTrack({
+      id: 'track-parent',
+      name: 'A2',
+      items: [makeAudioItem({
+        id: 'comp-audio-parent',
+        trackId: 'track-parent',
+        compositionId: 'composition-1',
+        mediaId: undefined,
+        src: '',
+      })],
+    });
+    const emptyTrack = makeTrack({
+      id: 'track-empty',
+      name: 'A3',
+      items: [],
+    });
+    const nestedAudio = makeAudioItem({
+      id: 'nested-audio-parent',
+      trackId: 'nested-track',
+      mediaId: 'nested-parent-media',
+      src: 'blob:nested-parent',
+    });
+
+    const graph = compileAudioMeterGraph({
+      tracks: [wrapperTrack, emptyTrack],
+      transitions: [],
+      fps: 30,
+      compositionsById: {
+        'composition-1': {
+          id: 'composition-1',
+          fps: 30,
+          transitions: [],
+          tracks: [makeTrack({ id: 'nested-track', items: [nestedAudio] })],
+        },
+      },
+    });
+    const sources = resolveCompiledAudioMeterSources({
+      graph,
+      frame: 15,
+      masterGain: 1,
+    });
+
+    expect(sources).toHaveLength(1);
+    expect(sources[0]?.trackId).toBe('track-parent');
+
+    const levels = estimatePerTrackLevels({
+      tracks: [wrapperTrack, emptyTrack],
+      sources,
+      targetTrackIds: ['track-parent', 'track-empty'],
+      waveformsByMediaId: new Map([
+        ['nested-parent-media', {
+          peaks: new Float32Array([1, 0.5, 0.25, 0.1]),
+          sampleRate: 1,
+          channels: 1,
+        }],
+      ]),
+    });
+
+    expect(levels.get('track-parent')?.left ?? 0).toBeGreaterThan(0);
+    expect(levels.get('track-empty')?.left ?? 0).toBe(0);
   });
 
   it('estimates a mixed level from cached waveform peaks', () => {

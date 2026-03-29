@@ -10,6 +10,7 @@ export {
   findCompatibleTrackForItemType,
   findNearestAvailableSpace,
   getDefaultGeneratedLayerDurationInFrames,
+  getTrackKind,
   areFramesAligned,
   getMaxTransitionDurationForHandles,
   resolveTransitionTargetFromSelection,

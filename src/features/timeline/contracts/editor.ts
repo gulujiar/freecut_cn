@@ -26,6 +26,7 @@ export {
   getDefaultGeneratedLayerDurationInFrames,
 } from '../utils/generated-layer-items';
 export { findCompatibleTrackForItemType } from '../utils/track-item-compatibility';
+export { getTrackKind } from '../utils/classic-tracks';
 export {
   timelineToSourceFrames,
   sourceToTimelineFrames,
