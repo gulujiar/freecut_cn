@@ -31,6 +31,7 @@ export interface AudioMixerViewProps {
   };
   isPlaying: boolean;
   onTrackVolumeChange: (trackId: string, volumeDb: number) => void;
+  onTrackVolumeCommit?: (trackId: string, volumeDb: number) => void;
   onTrackMuteToggle: (trackId: string) => void;
   onTrackSoloToggle: (trackId: string) => void;
   headerExtra?: ReactNode;
@@ -95,23 +96,38 @@ interface ChannelFaderProps {
   trackId: string;
   volumeDb: number;
   onVolumeChange: (trackId: string, volumeDb: number) => void;
+  onVolumeCommit?: (trackId: string, volumeDb: number) => void;
 }
 
 const ChannelFader = memo(function ChannelFader({
   trackId,
   volumeDb,
   onVolumeChange,
+  onVolumeCommit,
 }: ChannelFaderProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
+  const knobRef = useRef<HTMLDivElement | null>(null);
   const isDraggingRef = useRef(false);
   const dragOffsetPercentRef = useRef(0);
+  const latestDbRef = useRef(volumeDb);
+  const rafIdRef = useRef<number | null>(null);
+
+  // Sync from props when not dragging
+  if (!isDraggingRef.current) {
+    latestDbRef.current = volumeDb;
+  }
+
+  useEffect(() => {
+    return () => {
+      if (rafIdRef.current !== null) cancelAnimationFrame(rafIdRef.current);
+    };
+  }, []);
 
   const percentFromPointerEvent = useCallback((e: PointerEvent): number => {
     const el = trackRef.current;
     if (!el) return 0;
     const rect = el.getBoundingClientRect();
     if (rect.height <= 0) return 0;
-    // bottom = 0%, top = 100%
     const y = Math.max(0, Math.min(rect.height, rect.bottom - e.clientY));
     return (y / rect.height) * 100;
   }, []);
@@ -124,7 +140,7 @@ const ChannelFader = memo(function ChannelFader({
     if (rect.height <= 0) return 0;
 
     const pointerYFromBottom = Math.max(0, Math.min(rect.height, rect.bottom - e.clientY));
-    const currentPercent = dbToFaderPercent(volumeDb);
+    const currentPercent = dbToFaderPercent(latestDbRef.current);
     const knobCenterYFromBottom = (currentPercent / 100) * rect.height;
     const pointerIsNearKnob = Math.abs(pointerYFromBottom - knobCenterYFromBottom) <= Math.max(
       FADER_KNOB_DRAG_TOLERANCE_PX,
@@ -136,7 +152,23 @@ const ChannelFader = memo(function ChannelFader({
     }
 
     return currentPercent - ((pointerYFromBottom / rect.height) * 100);
-  }, [volumeDb]);
+  }, []);
+
+  // Instant visual update + rAF-throttled store update
+  const applyDragValue = useCallback((db: number) => {
+    latestDbRef.current = db;
+    // Instant knob position (bypass React render)
+    if (knobRef.current) {
+      knobRef.current.style.top = `${100 - dbToFaderPercent(db)}%`;
+    }
+    // Batch store update to next animation frame
+    if (rafIdRef.current === null) {
+      rafIdRef.current = requestAnimationFrame(() => {
+        rafIdRef.current = null;
+        onVolumeChange(trackId, latestDbRef.current);
+      });
+    }
+  }, [onVolumeChange, trackId]);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -146,9 +178,9 @@ const ChannelFader = memo(function ChannelFader({
       dragOffsetPercentRef.current = dragOffsetPercentFromPointerEvent(e.nativeEvent);
       const percent = percentFromPointerEvent(e.nativeEvent);
       const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current));
-      onVolumeChange(trackId, Math.round(faderPercentToDb(adjustedPercent) * 10) / 10);
+      applyDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10);
     },
-    [dragOffsetPercentFromPointerEvent, onVolumeChange, percentFromPointerEvent, trackId],
+    [applyDragValue, dragOffsetPercentFromPointerEvent, percentFromPointerEvent],
   );
 
   const handlePointerMove = useCallback(
@@ -156,9 +188,9 @@ const ChannelFader = memo(function ChannelFader({
       if (!isDraggingRef.current) return;
       const percent = percentFromPointerEvent(e.nativeEvent);
       const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current));
-      onVolumeChange(trackId, Math.round(faderPercentToDb(adjustedPercent) * 10) / 10);
+      applyDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10);
     },
-    [onVolumeChange, percentFromPointerEvent, trackId],
+    [applyDragValue, percentFromPointerEvent],
   );
 
   const handlePointerUp = useCallback(
@@ -166,8 +198,15 @@ const ChannelFader = memo(function ChannelFader({
       isDraggingRef.current = false;
       dragOffsetPercentRef.current = 0;
       e.currentTarget.releasePointerCapture?.(e.pointerId);
+      // Flush any pending rAF and do final store + commit
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current);
+        rafIdRef.current = null;
+      }
+      onVolumeChange(trackId, latestDbRef.current);
+      onVolumeCommit?.(trackId, latestDbRef.current);
     },
-    [],
+    [onVolumeChange, onVolumeCommit, trackId],
   );
 
   const knobPercent = dbToFaderPercent(volumeDb);
@@ -193,6 +232,7 @@ const ChannelFader = memo(function ChannelFader({
 
       {/* Fader knob */}
       <div
+        ref={knobRef}
         data-track-id={trackId}
         data-fader-knob="true"
         className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 w-[14px] h-[20px] rounded-[3px] bg-zinc-400 shadow-[0_1px_3px_rgba(0,0,0,0.5)] border border-zinc-300/30 pointer-events-none"
@@ -221,6 +261,7 @@ interface ChannelStripProps {
   } | undefined;
   isPlaying: boolean;
   onVolumeChange: (trackId: string, volumeDb: number) => void;
+  onVolumeCommit?: (trackId: string, volumeDb: number) => void;
   onMuteToggle: (trackId: string) => void;
   onSoloToggle: (trackId: string) => void;
 }
@@ -230,6 +271,7 @@ const ChannelStrip = memo(function ChannelStrip({
   level,
   isPlaying,
   onVolumeChange,
+  onVolumeCommit,
   onMuteToggle,
   onSoloToggle,
 }: ChannelStripProps) {
@@ -326,6 +368,7 @@ const ChannelStrip = memo(function ChannelStrip({
             trackId={track.id}
             volumeDb={track.volume}
             onVolumeChange={onVolumeChange}
+            onVolumeCommit={onVolumeCommit}
           />
         </div>
       </div>
@@ -452,6 +495,7 @@ export const AudioMixerView = memo(function AudioMixerView({
   masterEstimate,
   isPlaying,
   onTrackVolumeChange,
+  onTrackVolumeCommit,
   onTrackMuteToggle,
   onTrackSoloToggle,
   headerExtra,
@@ -493,6 +537,7 @@ export const AudioMixerView = memo(function AudioMixerView({
                 level={perTrackLevels.get(track.id)}
                 isPlaying={isPlaying}
                 onVolumeChange={onTrackVolumeChange}
+                onVolumeCommit={onTrackVolumeCommit}
                 onMuteToggle={onTrackMuteToggle}
                 onSoloToggle={onTrackSoloToggle}
               />

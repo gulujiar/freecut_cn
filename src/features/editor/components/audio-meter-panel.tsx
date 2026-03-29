@@ -357,7 +357,8 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   const handleTrackVolumeChange = useCallback((trackId: string, volumeDb: number) => {
     if (!Number.isFinite(volumeDb)) return;
-    // Direct store update (no undo) for smooth fader dragging
+    // Direct store update (no undo) for smooth fader dragging — no markDirty here,
+    // that happens on commit (pointerUp) to avoid triggering saves during drag
     const currentTracks = useItemsStore.getState().tracks;
     useItemsStore.getState().setTracks(
       currentTracks.map((track) =>
@@ -367,6 +368,9 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
           : Number.isFinite(track.volume) ? track : { ...track, volume: 0 }
       ),
     );
+  }, []);
+
+  const handleTrackVolumeCommit = useCallback((_trackId: string, _volumeDb: number) => {
     useTimelineStore.getState().markDirty();
   }, []);
 
@@ -431,6 +435,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         masterEstimate={estimate}
         isPlaying={isPlaying}
         onTrackVolumeChange={handleTrackVolumeChange}
+        onTrackVolumeCommit={handleTrackVolumeCommit}
         onTrackMuteToggle={handleTrackMuteToggle}
         onTrackSoloToggle={handleTrackSoloToggle}
         headerExtra={modeDropdown}
