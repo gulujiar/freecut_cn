@@ -73,7 +73,10 @@ import {
   updateAdaptivePreviewQuality,
 } from '../utils/adaptive-preview-quality';
 import { shouldPreferPlayerForStyledTextScrub as shouldPreferPlayerForStyledTextScrubGuard } from '../utils/text-render-guard';
-import { useGpuEffectsOverlay } from '../hooks/use-gpu-effects-overlay';
+import {
+  shouldForceContinuousPreviewOverlay,
+  useGpuEffectsOverlay,
+} from '../hooks/use-gpu-effects-overlay';
 import { useCustomPlayer } from '../hooks/use-custom-player';
 import { getBestDomVideoElementForItem, transitionSafePlay } from '@/features/preview/deps/composition-runtime';
 import { createLogger, createOperationId, type WideEvent } from '@/shared/logging/logger';
@@ -1748,6 +1751,10 @@ export const VideoPreview = memo(function VideoPreview({
     }
     return resolveTransitionWindows(transitions, clipMap);
   }, [fastScrubScaledTracks, transitions]);
+  const fastScrubPreviewItems = useMemo(
+    () => fastScrubScaledTracks.flatMap((track) => track.items as TimelineItem[]),
+    [fastScrubScaledTracks],
+  );
 
   const playbackTransitionLookaheadFrames = useMemo(
     () => Math.max(2, Math.round(fps * 0.25)),
@@ -1820,6 +1827,13 @@ export const VideoPreview = memo(function VideoPreview({
       frame >= window.startFrame && frame < window.endFrame + playbackTransitionCooldownFrames
     )) ?? null;
   }, [playbackTransitionCooldownFrames, playbackTransitionWindows]);
+  const shouldPreserveHighFidelityBackwardPreview = useCallback((frame: number | null) => {
+    if (frame === null) return false;
+    if (getTransitionWindowForFrame(frame) !== null) {
+      return true;
+    }
+    return shouldForceContinuousPreviewOverlay(fastScrubPreviewItems, transitions.length, frame);
+  }, [fastScrubPreviewItems, getTransitionWindowForFrame, transitions.length]);
 
   const clearTransitionPlaybackSession = useCallback(() => {
     const activeTrace = transitionSessionTraceRef.current;
@@ -3947,10 +3961,14 @@ export const VideoPreview = memo(function VideoPreview({
 
       const nextSuppressBackgroundPrewarm = FAST_SCRUB_DISABLE_BACKGROUND_PREWARM_ON_BACKWARD
         && scrubDirectionRef.current < 0;
+      const preserveHighFidelityBackwardPreview = shouldPreserveHighFidelityBackwardPreview(
+        targetFrame,
+      );
       const nextFallbackToPlayer = !forceFastScrubOverlay
         && FAST_SCRUB_FALLBACK_TO_PLAYER_ON_BACKWARD
         && scrubDirectionRef.current < 0
-        && !isAtomicScrubTarget;
+        && !isAtomicScrubTarget
+        && !preserveHighFidelityBackwardPreview;
       if (nextSuppressBackgroundPrewarm !== suppressScrubBackgroundPrewarmRef.current) {
         suppressScrubBackgroundPrewarmRef.current = nextSuppressBackgroundPrewarm;
         scrubPrewarmQueueRef.current = [];
@@ -4026,7 +4044,11 @@ export const VideoPreview = memo(function VideoPreview({
       }
 
       let nextRequestedFrame = targetFrame;
-      if (scrubDirectionRef.current < 0 && !isAtomicScrubTarget) {
+      if (
+        scrubDirectionRef.current < 0
+        && !isAtomicScrubTarget
+        && !preserveHighFidelityBackwardPreview
+      ) {
         const nowMs = performance.now();
         const quantizedFrame = Math.floor(
           targetFrame / FAST_SCRUB_BACKWARD_RENDER_QUANTIZE_FRAMES

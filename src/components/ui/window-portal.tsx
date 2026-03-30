@@ -218,7 +218,7 @@ export function WindowPortal({
         }
       }, 50);
     };
-  }, []);  // eslint-disable-line react-hooks/exhaustive-deps -- intentionally run once
+  }, []);
 
   if (!container) return null;
   return createPortal(children, container);

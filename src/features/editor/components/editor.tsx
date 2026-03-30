@@ -35,8 +35,7 @@ import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runti
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { importExportDialog } from '@/features/editor/deps/export-contract';
 import { getEditorLayout, getEditorLayoutCssVars } from '@/shared/ui/editor-layout';
-import { createProjectUpgradeBackup } from '@/features/projects/services/project-upgrade-service';
-import { formatProjectUpgradeBackupName } from '@/features/projects/utils/project-helpers';
+import { createProjectUpgradeBackup, formatProjectUpgradeBackupName } from '@/features/editor/deps/projects';
 import { ProjectUpgradeDialog } from './project-upgrade-dialog';
 
 const logger = createLogger('Editor');
