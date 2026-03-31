@@ -196,7 +196,10 @@ export const LoadedEditor = memo(function LoadedEditor({
 
   // Initialize timeline from project data (or create default tracks for new projects).
   useEffect(() => {
-    const { setCurrentProject: setMediaProject } = useMediaLibraryStore.getState();
+    const {
+      setCurrentProject: setMediaProject,
+      loadMediaItems,
+    } = useMediaLibraryStore.getState();
     const { setCurrentProject } = useProjectStore.getState();
     const playbackStore = usePlaybackStore.getState();
 
@@ -207,6 +210,9 @@ export const LoadedEditor = memo(function LoadedEditor({
 
     // Set current project context for media library (v3: project-scoped media)
     setMediaProject(projectId);
+    void loadMediaItems().catch((error) => {
+      logger.error('Failed to load media library:', error);
+    });
 
     // Set current project in project store for properties panel
     setCurrentProject({

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   invalidate: vi.fn().mockResolvedValue(undefined),
   navigate: vi.fn(),
   loadTimeline: vi.fn().mockResolvedValue(undefined),
+  loadMediaItems: vi.fn().mockResolvedValue(undefined),
   saveTimeline: vi.fn().mockResolvedValue(undefined),
   setMediaProject: vi.fn(),
   setProject: vi.fn(),
@@ -131,6 +132,7 @@ vi.mock('@/features/editor/deps/media-library', () => {
   const useMediaLibraryStore = Object.assign(() => undefined, {
     getState: () => ({
       setCurrentProject: mocks.setMediaProject,
+      loadMediaItems: mocks.loadMediaItems,
     }),
   });
 
@@ -219,6 +221,7 @@ describe('LoadedEditor migration metadata refresh', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.loadTimeline.mockResolvedValue(undefined);
+    mocks.loadMediaItems.mockResolvedValue(undefined);
     mocks.invalidate.mockResolvedValue(undefined);
   });
 
@@ -250,6 +253,7 @@ describe('LoadedEditor migration metadata refresh', () => {
         allowProjectUpgrade: true,
       })
     );
+    expect(mocks.loadMediaItems).toHaveBeenCalledTimes(1);
 
     await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1));
 
@@ -293,6 +297,7 @@ describe('LoadedEditor migration metadata refresh', () => {
         allowProjectUpgrade: false,
       })
     );
+    expect(mocks.loadMediaItems).toHaveBeenCalledTimes(1);
 
     await waitFor(() => expect(mocks.invalidate).not.toHaveBeenCalled());
   });
