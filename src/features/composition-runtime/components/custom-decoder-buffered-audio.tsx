@@ -261,11 +261,11 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     const gain = gainNodeRef.current;
     if (!ctx || !gain) return;
 
-    audioVolumeRef.current = audioVolume;
+    const safeVolume = Number.isFinite(audioVolume) ? Math.max(0, audioVolume) : 0;
+    audioVolumeRef.current = safeVolume;
     const now = ctx.currentTime;
     gain.gain.cancelScheduledValues(now);
     gain.gain.setValueAtTime(gain.gain.value, now);
-    const safeVolume = Number.isFinite(audioVolume) ? Math.max(0, audioVolume) : 0;
     gain.gain.linearRampToValueAtTime(safeVolume, now + GAIN_RAMP_SECONDS);
   }, [audioVolume]);
 

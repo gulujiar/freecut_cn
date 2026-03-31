@@ -113,6 +113,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
     () => getClipHeader(selectedItems),
     [selectedItems]
   );
+  const activeClipHeader = !selectedTransitionId && !selectedMarkerId ? clipHeader : null;
 
   // Resize handle logic
   const isResizingRef = useRef(false);
@@ -176,11 +177,11 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
                 <Settings2 className="w-3 h-3 shrink-0 text-muted-foreground" />
                 <h2 className="min-w-0 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                   <span className="shrink-0 uppercase tracking-wide">Properties</span>
-                  {clipHeader && (
+                  {activeClipHeader && (
                     <>
                       <span className="shrink-0">-</span>
-                      <span className="truncate normal-case tracking-normal" title={clipHeader.title}>
-                        {clipHeader.text}
+                      <span className="truncate normal-case tracking-normal" title={activeClipHeader.title}>
+                        {activeClipHeader.text}
                       </span>
                     </>
                   )}

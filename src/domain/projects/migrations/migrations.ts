@@ -215,14 +215,15 @@ function migrateTimelineTransitionsToCutCentered(
 function renumberTrackOrders(
   tracks: ProjectTimeline['tracks'],
 ): ProjectTimeline['tracks'] {
-  return [...tracks]
+  return tracks
+    .map((track, index) => ({ track, index }))
     .sort((left, right) => {
-      const leftOrder = left.order ?? 0;
-      const rightOrder = right.order ?? 0;
+      const leftOrder = left.track.order ?? left.index;
+      const rightOrder = right.track.order ?? right.index;
       if (leftOrder !== rightOrder) return leftOrder - rightOrder;
-      return left.id.localeCompare(right.id);
+      return left.index - right.index;
     })
-    .map((track, index) => ({
+    .map(({ track }, index) => ({
       ...track,
       order: index,
     }));

@@ -118,6 +118,12 @@ export function WindowPortal({
   const mountedRef = useRef(true);
 
   useEffect(() => {
+    const externalWindow = externalWindowRef.current;
+    if (!externalWindow || externalWindow.closed) return;
+    externalWindow.document.title = title;
+  }, [title]);
+
+  useEffect(() => {
     mountedRef.current = true;
 
     // Reuse window from previous mount (survives StrictMode double-mount)
@@ -192,12 +198,9 @@ export function WindowPortal({
     // Handle external window close (user action only)
     const handleUnload = () => {
       persistBounds();
-      // Defer the onClose call so it doesn't fire during StrictMode cleanup
-      setTimeout(() => {
-        if (!mountedRef.current) {
-          onCloseRef.current();
-        }
-      }, 0);
+      externalWindowRef.current = null;
+      setContainer(null);
+      onCloseRef.current();
     };
 
     win.addEventListener('beforeunload', handleUnload);

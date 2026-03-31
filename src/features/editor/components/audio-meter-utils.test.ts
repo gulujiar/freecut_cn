@@ -145,14 +145,33 @@ describe('audio meter utils', () => {
     expect(isAudioMixerTrack(track)).toBe(true);
   });
 
-  it('does not render V tracks in the mixer', () => {
+  it('renders standalone video tracks in the mixer when they have audible media', () => {
     const track = makeTrack({
       name: 'V1',
       kind: undefined,
       items: [makeVideoItem()],
     });
 
-    expect(isAudioMixerTrack(track)).toBe(false);
+    expect(isAudioMixerTrack(track)).toBe(true);
+  });
+
+  it('does not render linked video tracks in the mixer when a companion audio track exists', () => {
+    const videoItem = makeVideoItem({
+      id: 'video-linked',
+      linkedGroupId: 'linked-1',
+    });
+    const audioItem = makeAudioItem({
+      id: 'audio-linked',
+      linkedGroupId: 'linked-1',
+      trackId: 'track-audio',
+    });
+    const track = makeTrack({
+      name: 'V1',
+      kind: undefined,
+      items: [videoItem],
+    });
+
+    expect(isAudioMixerTrack(track, [videoItem, audioItem])).toBe(false);
   });
 
   it('estimates per-track levels for composition-backed audio tracks', () => {

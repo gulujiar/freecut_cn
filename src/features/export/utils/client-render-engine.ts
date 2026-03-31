@@ -1100,7 +1100,7 @@ export async function createCompositionRenderer(
         maskFrameIndex,
         frame,
         maskSettings,
-        keyframesMap,
+        getCurrentKeyframes,
         renderMode === 'preview' ? getPreviewTransformOverride : undefined,
         renderMode === 'preview' ? getPreviewPathVerticesOverride : undefined,
       );

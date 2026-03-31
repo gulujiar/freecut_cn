@@ -256,4 +256,128 @@ describe('AudioMixerView', () => {
     expect(container.querySelector('[data-track-id="track-1"][data-track-channel="left"]')).toHaveStyle({ height: '0%' });
     expect(container.querySelector('[data-track-id="track-1"][data-track-channel="right"]')).toHaveStyle({ height: '0%' });
   });
+
+  it('commits the dragged value when the pointer is cancelled', () => {
+    const handleTrackVolumeChange = vi.fn();
+    const { container } = render(
+      <AudioMixerView
+        tracks={[
+          {
+            id: 'track-1',
+            name: 'A1',
+            kind: 'audio',
+            muted: false,
+            solo: false,
+            volume: 0,
+            itemIds: ['item-1'],
+          },
+        ]}
+        perTrackLevels={new Map()}
+        masterEstimate={{
+          left: 0,
+          right: 0,
+          unresolvedSourceCount: 0,
+          resolvedSourceCount: 0,
+        }}
+        isPlaying
+        onTrackVolumeChange={handleTrackVolumeChange}
+        onTrackMuteToggle={() => undefined}
+        onTrackSoloToggle={() => undefined}
+      />,
+    );
+
+    const faderRoot = container.querySelector('[data-track-id="track-1"][data-fader-root="true"]') as HTMLDivElement | null;
+    expect(faderRoot).not.toBeNull();
+
+    Object.defineProperty(faderRoot!, 'getBoundingClientRect', {
+      value: () => ({
+        x: 0,
+        y: 20,
+        top: 20,
+        bottom: 220,
+        left: 0,
+        right: 20,
+        width: 20,
+        height: 200,
+        toJSON: () => ({}),
+      }),
+    });
+    Object.defineProperty(faderRoot!, 'setPointerCapture', {
+      value: vi.fn(),
+      configurable: true,
+    });
+    Object.defineProperty(faderRoot!, 'releasePointerCapture', {
+      value: vi.fn(),
+      configurable: true,
+    });
+
+    fireEvent.pointerDown(faderRoot!, { pointerId: 1, clientY: 53.5 });
+    fireEvent.pointerMove(faderRoot!, { pointerId: 1, clientY: 43.5 });
+    fireEvent.pointerCancel(faderRoot!, { pointerId: 1, clientY: 43.5 });
+
+    expect(handleTrackVolumeChange).toHaveBeenCalledTimes(1);
+    expect(handleTrackVolumeChange.mock.calls[0]?.[1]).toBeGreaterThan(-10);
+  });
+
+  it('commits the dragged value when the mixer unmounts mid-drag', () => {
+    const handleTrackVolumeChange = vi.fn();
+    const { container, unmount } = render(
+      <AudioMixerView
+        tracks={[
+          {
+            id: 'track-1',
+            name: 'A1',
+            kind: 'audio',
+            muted: false,
+            solo: false,
+            volume: 0,
+            itemIds: ['item-1'],
+          },
+        ]}
+        perTrackLevels={new Map()}
+        masterEstimate={{
+          left: 0,
+          right: 0,
+          unresolvedSourceCount: 0,
+          resolvedSourceCount: 0,
+        }}
+        isPlaying
+        onTrackVolumeChange={handleTrackVolumeChange}
+        onTrackMuteToggle={() => undefined}
+        onTrackSoloToggle={() => undefined}
+      />,
+    );
+
+    const faderRoot = container.querySelector('[data-track-id="track-1"][data-fader-root="true"]') as HTMLDivElement | null;
+    expect(faderRoot).not.toBeNull();
+
+    Object.defineProperty(faderRoot!, 'getBoundingClientRect', {
+      value: () => ({
+        x: 0,
+        y: 20,
+        top: 20,
+        bottom: 220,
+        left: 0,
+        right: 20,
+        width: 20,
+        height: 200,
+        toJSON: () => ({}),
+      }),
+    });
+    Object.defineProperty(faderRoot!, 'setPointerCapture', {
+      value: vi.fn(),
+      configurable: true,
+    });
+    Object.defineProperty(faderRoot!, 'releasePointerCapture', {
+      value: vi.fn(),
+      configurable: true,
+    });
+
+    fireEvent.pointerDown(faderRoot!, { pointerId: 1, clientY: 53.5 });
+    fireEvent.pointerMove(faderRoot!, { pointerId: 1, clientY: 43.5 });
+    unmount();
+
+    expect(handleTrackVolumeChange).toHaveBeenCalledTimes(1);
+    expect(handleTrackVolumeChange.mock.calls[0]?.[1]).toBeGreaterThan(-10);
+  });
 });

@@ -11,6 +11,7 @@ export {
   findNearestAvailableSpace,
   getDefaultGeneratedLayerDurationInFrames,
   getTrackKind,
+  resolveEffectiveTrackStates,
   areFramesAligned,
   getMaxTransitionDurationForHandles,
   resolveTransitionTargetFromSelection,

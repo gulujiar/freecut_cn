@@ -261,7 +261,7 @@ export const FloatingPanel = memo(function FloatingPanel({
         <span className="text-xs font-mono uppercase tracking-[0.12em] text-muted-foreground">
           {title}
         </span>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1" onPointerDown={(e) => e.stopPropagation()}>
           {headerExtra}
           {onClose && (
             <button

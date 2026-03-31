@@ -36,7 +36,15 @@ export function ProjectUpgradeDialog({
         onCancel();
       }
     }}>
-      <DialogContent className="max-w-lg" hideCloseButton>
+      <DialogContent
+        className="max-w-lg"
+        hideCloseButton
+        onEscapeKeyDown={(event) => {
+          if (isUpgrading) {
+            event.preventDefault();
+          }
+        }}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />

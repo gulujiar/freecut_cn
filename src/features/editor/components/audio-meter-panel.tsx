@@ -35,9 +35,10 @@ import {
   type AudioMeterWaveform,
 } from './audio-meter-utils';
 import { AudioMixerView, type AudioMixerTrack } from './audio-mixer-view';
-import { setMixerLiveGains } from '@/shared/state/mixer-live-gain';
+import { clearMixerLiveGainLayer, setMixerLiveGainLayer } from '@/shared/state/mixer-live-gain';
 
 type PanelMode = 'meter' | 'mixer';
+const MUTE_SOLO_GAIN_LAYER_ID = 'audio-meter-mute-solo';
 
 function toWaveformSnapshot(
   waveform: { peaks: Float32Array; sampleRate: number; channels?: number; stereo?: boolean } | null | undefined,
@@ -120,6 +121,10 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         items: itemsByTrackId[track.id] ?? [],
       }));
   }, [itemsByTrackId, trackSnapshotVersion, tracks]);
+  const combinedTimelineItems = useMemo(
+    () => combinedTracks.flatMap((track) => track.items),
+    [combinedTracks],
+  );
   const combinedCompositionsById = useMemo<AudioMeterCompositionLookup>(() => {
     const next: AudioMeterCompositionLookup = {};
 
@@ -348,8 +353,8 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   const mixerSourceTracks = useMemo(() => {
     if (panelMode !== 'mixer') return [];
-    return combinedTracks.filter((track) => isAudioMixerTrack(track));
-  }, [combinedTracks, panelMode]);
+    return combinedTracks.filter((track) => isAudioMixerTrack(track, combinedTimelineItems));
+  }, [combinedTimelineItems, combinedTracks, panelMode]);
 
   const mixerTracks = useMemo<AudioMixerTrack[]>(() => {
     return mixerSourceTracks.map((track) => ({
@@ -430,7 +435,19 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   // without waiting for a full composition re-render.
   const applyMuteSoloLiveGains = useCallback(() => {
     const currentTracks = useItemsStore.getState().tracks;
-    const audioTracks = currentTracks.filter((t) => !t.isGroup && isAudioMixerTrack(t));
+    const currentItemsByTrackId = useItemsStore.getState().itemsByTrackId;
+    const currentTimelineItems = Object.values(currentItemsByTrackId).flat();
+    const audioTracks = currentTracks
+      .filter((t) => !t.isGroup)
+      .map((track) => ({
+        ...track,
+        items: currentItemsByTrackId[track.id] ?? [],
+      }))
+      .filter((track) => isAudioMixerTrack(track, currentTimelineItems));
+    if (audioTracks.length === 0) {
+      clearMixerLiveGainLayer(MUTE_SOLO_GAIN_LAYER_ID);
+      return;
+    }
     const anySoloed = audioTracks.some((t) => t.solo);
 
     const entries: Array<{ itemId: string; gain: number }> = [];
@@ -441,7 +458,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         entries.push({ itemId, gain });
       }
     }
-    setMixerLiveGains(entries);
+    setMixerLiveGainLayer(MUTE_SOLO_GAIN_LAYER_ID, entries);
   }, [getTrackItemIds]);
 
   // In-place mutation for mute/solo — same pattern as volume change.

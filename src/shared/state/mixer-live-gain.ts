@@ -8,7 +8,8 @@
 
 import { useCallback, useSyncExternalStore } from 'react';
 
-const overrides = new Map<string, number>();
+const DEFAULT_LAYER_ID = 'default';
+const overridesByLayerId = new Map<string, Map<string, number>>();
 const listenersByItemId = new Map<string, Set<() => void>>();
 
 function notifyItemIds(itemIds: Iterable<string>): void {
@@ -26,46 +27,119 @@ function notifyItemIds(itemIds: Iterable<string>): void {
 }
 
 export function setMixerLiveGains(entries: Array<{ itemId: string; gain: number }>): void {
-  const changedItemIds = new Set<string>();
+  setMixerLiveGainLayer(DEFAULT_LAYER_ID, entries);
+}
 
-  for (const { itemId, gain } of entries) {
-    const nextGain = Object.is(gain, 1) ? undefined : gain;
-    const previousGain = overrides.get(itemId);
+function getMixerLiveGainForItemAcrossLayers(itemId: string): number {
+  let gainProduct = 1;
 
-    if (nextGain === undefined) {
-      if (overrides.delete(itemId)) {
-        changedItemIds.add(itemId);
-      }
-      continue;
-    }
-
-    if (Object.is(previousGain, nextGain)) {
-      continue;
-    }
-
-    overrides.set(itemId, nextGain);
-    changedItemIds.add(itemId);
+  for (const layerOverrides of overridesByLayerId.values()) {
+    gainProduct *= layerOverrides.get(itemId) ?? 1;
   }
 
-  if (changedItemIds.size > 0) {
+  return gainProduct;
+}
+
+export function setMixerLiveGainLayer(layerId: string, entries: Array<{ itemId: string; gain: number }>): void {
+  if (entries.length === 0) return;
+
+  const layerOverrides = overridesByLayerId.get(layerId);
+  const previousCombinedGains = new Map<string, number>();
+
+  for (const { itemId } of entries) {
+    if (!previousCombinedGains.has(itemId)) {
+      previousCombinedGains.set(itemId, getMixerLiveGainForItemAcrossLayers(itemId));
+    }
+  }
+
+  let nextLayerOverrides = layerOverrides;
+  for (const { itemId, gain } of entries) {
+    const nextGain = Object.is(gain, 1) ? undefined : gain;
+    if (nextGain === undefined) {
+      nextLayerOverrides?.delete(itemId);
+      continue;
+    }
+
+    if (!nextLayerOverrides) {
+      nextLayerOverrides = new Map();
+      overridesByLayerId.set(layerId, nextLayerOverrides);
+    }
+
+    nextLayerOverrides.set(itemId, nextGain);
+  }
+
+  if (nextLayerOverrides && nextLayerOverrides.size === 0) {
+    overridesByLayerId.delete(layerId);
+  }
+
+  const changedItemIds: string[] = [];
+  for (const [itemId, previousGain] of previousCombinedGains.entries()) {
+    if (!Object.is(previousGain, getMixerLiveGainForItemAcrossLayers(itemId))) {
+      changedItemIds.push(itemId);
+    }
+  }
+
+  if (changedItemIds.length > 0) {
+    notifyItemIds(changedItemIds);
+  }
+}
+
+export function clearMixerLiveGainLayer(layerId: string): void {
+  const layerOverrides = overridesByLayerId.get(layerId);
+  if (!layerOverrides || layerOverrides.size === 0) return;
+
+  const previousCombinedGains = new Map<string, number>();
+  for (const itemId of layerOverrides.keys()) {
+    previousCombinedGains.set(itemId, getMixerLiveGainForItemAcrossLayers(itemId));
+  }
+
+  overridesByLayerId.delete(layerId);
+
+  const changedItemIds: string[] = [];
+  for (const [itemId, previousGain] of previousCombinedGains.entries()) {
+    if (!Object.is(previousGain, getMixerLiveGainForItemAcrossLayers(itemId))) {
+      changedItemIds.push(itemId);
+    }
+  }
+
+  if (changedItemIds.length > 0) {
     notifyItemIds(changedItemIds);
   }
 }
 
 export function clearMixerLiveGains(): void {
-  if (overrides.size === 0) return;
-  const changedItemIds = [...overrides.keys()];
-  overrides.clear();
+  if (overridesByLayerId.size === 0) return;
+
+  const changedItemIds = new Set<string>();
+  for (const layerOverrides of overridesByLayerId.values()) {
+    for (const itemId of layerOverrides.keys()) {
+      changedItemIds.add(itemId);
+    }
+  }
+
+  overridesByLayerId.clear();
   notifyItemIds(changedItemIds);
 }
 
 export function clearMixerLiveGain(itemId: string): void {
-  if (!overrides.delete(itemId)) return;
-  notifyItemIds([itemId]);
+  const previousGain = getMixerLiveGainForItemAcrossLayers(itemId);
+  let didDelete = false;
+
+  for (const [layerId, layerOverrides] of overridesByLayerId.entries()) {
+    if (!layerOverrides.delete(itemId)) continue;
+    didDelete = true;
+    if (layerOverrides.size === 0) {
+      overridesByLayerId.delete(layerId);
+    }
+  }
+
+  if (didDelete && !Object.is(previousGain, getMixerLiveGainForItemAcrossLayers(itemId))) {
+    notifyItemIds([itemId]);
+  }
 }
 
 export function getMixerLiveGain(itemId: string): number {
-  return overrides.get(itemId) ?? 1;
+  return getMixerLiveGainForItemAcrossLayers(itemId);
 }
 
 function subscribe(itemId: string, callback: () => void): () => void {

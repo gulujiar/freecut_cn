@@ -7,7 +7,7 @@ import {
   isCompositionAudioItem,
 } from '@/shared/utils/linked-media';
 import { timelineToSourceFrames } from '@/features/editor/deps/timeline-utils';
-import { getTrackKind } from '@/features/editor/deps/timeline-utils';
+import { getTrackKind, resolveEffectiveTrackStates } from '@/features/editor/deps/timeline-utils';
 import {
   buildCompoundAudioTransitionSegments,
   buildStandaloneAudioSegments,
@@ -180,6 +180,7 @@ function appendCompositionWrapperSources(params: {
   sources: AudioMeterSource[];
   wrapper: EnrichedCompositionAudioItem | EnrichedCompositionItem;
   wrapperGain: number;
+  ownerTrackId?: string;
 }): void {
   const {
     frame,
@@ -187,6 +188,7 @@ function appendCompositionWrapperSources(params: {
     gainMultiplier,
     depth,
     compositionsById,
+    ownerTrackId,
     sources,
     wrapper,
     wrapperGain,
@@ -223,6 +225,7 @@ function appendCompositionWrapperSources(params: {
     gainMultiplier: gainMultiplier * wrapperGain,
     depth: depth + 1,
     compositionsById,
+    ownerTrackId: ownerTrackId ?? wrapper.trackId,
     sources,
   });
 }
@@ -233,11 +236,12 @@ function appendCompoundSegmentSources(params: {
   gainMultiplier: number;
   depth: number;
   compositionsById: AudioMeterCompositionLookup;
+  ownerTrackId?: string;
   sources: AudioMeterSource[];
   segment: CompoundAudioSegment;
   wrapper: EnrichedCompositionAudioItem;
 }): void {
-  const { frame, fps, gainMultiplier, depth, compositionsById, sources, segment, wrapper } = params;
+  const { frame, fps, gainMultiplier, depth, compositionsById, ownerTrackId, sources, segment, wrapper } = params;
   if (depth > AUDIO_METER_MAX_DEPTH || segment.muted) {
     return;
   }
@@ -275,6 +279,7 @@ function appendCompoundSegmentSources(params: {
     gainMultiplier: gainMultiplier * Math.max(0, toLinearGain(segment.volumeDb) * crossfadeMultiplier),
     depth: depth + 1,
     compositionsById,
+    ownerTrackId: ownerTrackId ?? wrapper.trackId,
     sources,
   });
 }
@@ -287,6 +292,7 @@ function appendAudioMeterSources(params: {
   gainMultiplier: number;
   depth: number;
   compositionsById: AudioMeterCompositionLookup;
+  ownerTrackId?: string;
   sources: AudioMeterSource[];
 }): void {
   const {
@@ -297,6 +303,7 @@ function appendAudioMeterSources(params: {
     gainMultiplier,
     depth,
     compositionsById,
+    ownerTrackId,
     sources,
   } = params;
 
@@ -304,8 +311,9 @@ function appendAudioMeterSources(params: {
     return;
   }
 
-  const items = tracks.flatMap((track) => track.items);
-  const renderPlan = resolveCompositionRenderPlan({ tracks, transitions });
+  const effectiveTracks = resolveEffectiveTrackStates(tracks);
+  const items = effectiveTracks.flatMap((track) => track.items);
+  const renderPlan = resolveCompositionRenderPlan({ tracks: effectiveTracks, transitions });
   const audioItems = renderPlan.audioItems;
   const visibleTrackIds = renderPlan.trackRenderState.visibleTrackIds;
 
@@ -337,19 +345,27 @@ function appendAudioMeterSources(params: {
     !isCompositionAudioItem(item) && !managedLinkedAudioIds.has(item.id)
   ));
   const videoAudioItems = renderPlan.videoItems.filter((item) => !hasLinkedAudioCompanion(audioItems, item));
+  const directTrackIdByItemId = new Map<string, string>([
+    ...standaloneAudioItems.map((item) => [item.id, item.trackId] as const),
+    ...videoAudioItems.map((item) => [item.id, item.trackId] as const),
+    ...managedLinkedAudioItems.map((item) => [item.id, item.trackId] as const),
+  ]);
   const directSegments = [
     ...buildStandaloneAudioSegments(standaloneAudioItems, fps),
     ...buildTransitionVideoAudioSegments(videoAudioItems, transitions, fps),
     ...buildTransitionVideoAudioSegments(managedLinkedAudioItems, managedLinkedAudioTransitionDefs, fps),
   ];
 
-  appendDirectSegmentSources({
-    frame,
-    fps,
-    gainMultiplier,
-    segments: directSegments,
-    sources,
-  });
+  for (const segment of directSegments) {
+    appendDirectSegmentSources({
+      frame,
+      fps,
+      gainMultiplier,
+      segments: [segment],
+      sources,
+      trackId: ownerTrackId ?? directTrackIdByItemId.get(segment.itemId) ?? '',
+    });
+  }
 
   const compoundAudioItems = audioItems.filter((item): item is EnrichedCompositionAudioItem => isCompositionAudioItem(item));
   const managedCompoundAudioItems = compoundAudioItems.filter((item) => managedLinkedAudioIds.has(item.id));
@@ -383,6 +399,7 @@ function appendAudioMeterSources(params: {
       gainMultiplier,
       depth,
       compositionsById,
+      ownerTrackId,
       sources,
       segment,
       wrapper,
@@ -397,13 +414,14 @@ function appendAudioMeterSources(params: {
       gainMultiplier,
       depth,
       compositionsById,
+      ownerTrackId,
       sources,
       wrapper,
       wrapperGain: toLinearGain((wrapper.volume ?? 0) + (wrapper.trackVolumeDb ?? 0)),
     });
   }
 
-  const standaloneCompositionVisualItems = tracks.flatMap((track) => (
+  const standaloneCompositionVisualItems = effectiveTracks.flatMap((track) => (
     track.items.flatMap((item): EnrichedCompositionItem[] => {
       if (item.type !== 'composition') return [];
       if (hasLinkedAudioCompanion(audioItems as TimelineItem[], item)) return [];
@@ -422,6 +440,7 @@ function appendAudioMeterSources(params: {
       gainMultiplier,
       depth,
       compositionsById,
+      ownerTrackId,
       sources,
       wrapper,
       wrapperGain: 1,
@@ -456,7 +475,8 @@ function buildAudioMeterGraphNode(params: {
   transitions: Transition[];
   fps: number;
 }): AudioMeterGraphNode {
-  const { tracks, transitions, fps } = params;
+  const { transitions, fps } = params;
+  const tracks = resolveEffectiveTrackStates(params.tracks);
   const items = tracks.flatMap((track) => track.items);
   const renderPlan = resolveCompositionRenderPlan({ tracks, transitions });
   const audioItems = renderPlan.audioItems;
@@ -911,20 +931,24 @@ export function dbMarkToPercent(mark: number): number {
   return linearLevelToPercent(Math.pow(10, mark / 20));
 }
 
-export function isAudioMixerTrack(track: TimelineTrack): boolean {
+export function isAudioMixerTrack(track: TimelineTrack, timelineItems: readonly TimelineItem[] = track.items): boolean {
   if (track.isGroup) {
     return false;
   }
 
-  const trackKind = getTrackKind(track);
-  if (trackKind === 'video') {
-    return false;
+  if (track.items.some((item) => item.type === 'audio')) {
+    return true;
   }
+
+  const trackKind = getTrackKind(track);
   if (trackKind === 'audio') {
     return true;
   }
 
-  return track.items.some((item) => item.type === 'audio');
+  return track.items.some((item) => (
+    (item.type === 'video' || item.type === 'composition')
+    && !hasLinkedAudioCompanion(timelineItems as TimelineItem[], item)
+  ));
 }
 
 export function estimatePerTrackLevels(params: {

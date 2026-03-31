@@ -429,6 +429,8 @@ export const ColorScopesView = memo(function ColorScopesView({
   const gpuCtxCacheRef = useRef(new Map<HTMLCanvasElement, GPUCanvasContext>());
   const gpuInitedRef = useRef(false);
   const gpuRenderInFlightRef = useRef(false);
+  const cpuDrawInFlightRef = useRef(false);
+  const cpuDrawPendingRef = useRef(false);
   const sampleCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const liveTickRef = useRef(0);
 
@@ -681,6 +683,23 @@ export const ColorScopesView = memo(function ColorScopesView({
     }
   }, [captureFrameImageData, captureFrame, open, gpuReady, colorMatrix, rangeMode, embedded, isPlaying, showHistogram]);
 
+  const runSerializedCpuDraw = useCallback(async () => {
+    if (cpuDrawInFlightRef.current) {
+      cpuDrawPendingRef.current = true;
+      return;
+    }
+
+    cpuDrawInFlightRef.current = true;
+    try {
+      do {
+        cpuDrawPendingRef.current = false;
+        await cpuDraw();
+      } while (cpuDrawPendingRef.current);
+    } finally {
+      cpuDrawInFlightRef.current = false;
+    }
+  }, [cpuDraw]);
+
   // CPU: update on frame change when paused
   useEffect(() => {
     if (gpuReady !== false || !open || isPlaying) return;
@@ -690,7 +709,7 @@ export const ColorScopesView = memo(function ColorScopesView({
       if (rafId !== null) return;
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        void cpuDraw();
+        void runSerializedCpuDraw();
       });
     };
 
@@ -714,8 +733,9 @@ export const ColorScopesView = memo(function ColorScopesView({
       if (rafId !== null) {
         cancelAnimationFrame(rafId);
       }
+      cpuDrawPendingRef.current = false;
     };
-  }, [gpuReady, open, isPlaying, cpuDraw]);
+  }, [gpuReady, open, isPlaying, runSerializedCpuDraw]);
 
   // CPU: polling loop during playback
   useEffect(() => {
@@ -723,12 +743,12 @@ export const ColorScopesView = memo(function ColorScopesView({
     let cancelled = false;
     void (async () => {
       while (!cancelled) {
-        await cpuDraw();
+        await runSerializedCpuDraw();
         await new Promise((r) => setTimeout(r, CPU_INTERVAL));
       }
     })();
     return () => { cancelled = true; };
-  }, [gpuReady, open, isPlaying, cpuDraw]);
+  }, [gpuReady, open, isPlaying, runSerializedCpuDraw]);
 
   if (!open) return null;
 

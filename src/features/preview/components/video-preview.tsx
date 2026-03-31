@@ -2600,9 +2600,14 @@ export const VideoPreview = memo(function VideoPreview({
       scrubOffscreenRenderedFrameRef.current = null;
     }
 
+    let removedBufferedFrame = false;
     for (const frame of [...transitionSessionBufferedFramesRef.current.keys()]) {
       if (!isFrameInRanges(frame, visualInvalidationRanges)) continue;
       transitionSessionBufferedFramesRef.current.delete(frame);
+      removedBufferedFrame = true;
+    }
+    if (removedBufferedFrame) {
+      lastPausedPrearmTargetRef.current = null;
     }
 
     if (

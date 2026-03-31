@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useRef, type HTMLAttributes, type ReactNode } from 'react';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { linearLevelToPercent } from './audio-meter-utils';
 import { getMixerLiveGain, setMixerLiveGains } from '@/shared/state/mixer-live-gain';
@@ -89,6 +89,8 @@ interface SegmentedMeterBarProps {
   scanning?: boolean;
   /** Additional className for the outer container */
   className?: string;
+  /** Optional attributes for the active fill element */
+  fillProps?: HTMLAttributes<HTMLDivElement>;
 }
 
 const SegmentedMeterBar = memo(function SegmentedMeterBar({
@@ -96,6 +98,7 @@ const SegmentedMeterBar = memo(function SegmentedMeterBar({
   peakBottom,
   scanning,
   className = '',
+  fillProps,
 }: SegmentedMeterBarProps) {
   return (
     <div className={`relative flex-1 rounded-[2px] bg-[#08090b] overflow-hidden ${className}`}>
@@ -107,6 +110,7 @@ const SegmentedMeterBar = memo(function SegmentedMeterBar({
 
       {/* Active fill — gradient with segment mask */}
       <div
+        {...fillProps}
         className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${scanning ? 'opacity-50' : ''}`}
         style={{
           height,
@@ -272,22 +276,38 @@ const ChannelFader = memo(function ChannelFader({
     [applyDragValue, percentFromPointerEvent],
   );
 
+  const finalizeDrag = useCallback((params?: {
+    pointerId?: number;
+    target?: Pick<HTMLDivElement, 'releasePointerCapture'> | null;
+  }) => {
+    if (!isDraggingRef.current) {
+      return;
+    }
+
+    const { pointerId, target } = params ?? {};
+    isDraggingRef.current = false;
+    dragOffsetPercentRef.current = 0;
+    if (target && pointerId !== undefined) {
+      target.releasePointerCapture?.(pointerId);
+    }
+    onVolumeChange(trackId, latestDbRef.current);
+  }, [onVolumeChange, trackId]);
+
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      isDraggingRef.current = false;
-      dragOffsetPercentRef.current = 0;
-      e.currentTarget.releasePointerCapture?.(e.pointerId);
-      // Keep meterDbOffsetRef at current value — the meter graph still uses
-      // the old track volume (in-place mutation doesn't trigger recompute),
-      // so the offset compensates for the stale estimate.
-      // Commit volume without triggering composition re-render:
-      // onVolumeChange mutates the track in place + markDirty.
-      // Live gains stay active to compensate for stale segment volumeDb.
-      // They auto-clear when the composition naturally re-renders.
-      onVolumeChange(trackId, latestDbRef.current);
+      finalizeDrag({
+        pointerId: e.pointerId,
+        target: e.currentTarget,
+      });
     },
-    [onVolumeChange, trackId],
+    [finalizeDrag],
   );
+
+  useEffect(() => {
+    return () => {
+      finalizeDrag();
+    };
+  }, [finalizeDrag]);
 
   const handleDoubleClick = useCallback(() => {
     applyDragValue(0);
@@ -306,6 +326,7 @@ const ChannelFader = memo(function ChannelFader({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onDoubleClick={handleDoubleClick}
     >
       {/* Fader track line */}
@@ -470,10 +491,18 @@ const ChannelStrip = memo(function ChannelStrip({
             <SegmentedMeterBar
               height={`${leftPercent}%`}
               scanning={showScanningFallback}
+              fillProps={{
+                'data-track-id': track.id,
+                'data-track-channel': 'left',
+              }}
             />
             <SegmentedMeterBar
               height={`${rightPercent}%`}
               scanning={showScanningFallback}
+              fillProps={{
+                'data-track-id': track.id,
+                'data-track-channel': 'right',
+              }}
             />
           </div>
 
@@ -549,6 +578,7 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying }: BusMeterP
               {/* Active fill */}
               <div
                 ref={leftBarRef}
+                data-bus-channel="left"
                 className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${showScanningFallback ? 'opacity-50' : ''}`}
                 style={{
                   height: '0%',
@@ -564,6 +594,7 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying }: BusMeterP
               {/* Active fill */}
               <div
                 ref={rightBarRef}
+                data-bus-channel="right"
                 className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${showScanningFallback ? 'opacity-50' : ''}`}
                 style={{
                   height: '0%',

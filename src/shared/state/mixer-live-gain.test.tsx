@@ -2,7 +2,9 @@ import { act, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   clearMixerLiveGain,
+  clearMixerLiveGainLayer,
   clearMixerLiveGains,
+  setMixerLiveGainLayer,
   setMixerLiveGains,
   useMixerLiveGain,
 } from './mixer-live-gain';
@@ -99,5 +101,28 @@ describe('mixer-live-gain', () => {
 
     expect(screen.getByTestId('gain-a').textContent).toBe('1');
     expect(screen.getByTestId('gain-b').textContent).toBe('0.75');
+  });
+
+  it('multiplies independent gain layers and clears them independently', () => {
+    render(<GainProbe itemId="item-a" testId="gain-a" />);
+
+    act(() => {
+      setMixerLiveGains([{ itemId: 'item-a', gain: 0.5 }]);
+      setMixerLiveGainLayer('mute-solo', [{ itemId: 'item-a', gain: 0.25 }]);
+    });
+
+    expect(screen.getByTestId('gain-a').textContent).toBe('0.125');
+
+    act(() => {
+      clearMixerLiveGainLayer('mute-solo');
+    });
+
+    expect(screen.getByTestId('gain-a').textContent).toBe('0.5');
+
+    act(() => {
+      clearMixerLiveGain('item-a');
+    });
+
+    expect(screen.getByTestId('gain-a').textContent).toBe('1');
   });
 });

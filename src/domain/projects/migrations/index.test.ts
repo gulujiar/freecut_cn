@@ -327,4 +327,25 @@ describe('migrateProject transition normalization', () => {
     ]);
     expect(result.project.timeline?.compositions?.[0]?.items[0]?.originId).toBe('comp-video-1');
   });
+
+  it('preserves legacy array order when tracks are missing explicit order values', () => {
+    const project = createBaseProject({
+      tracks: [
+        { ...createTrack('video-top', 0, 'video'), order: undefined } as unknown as ProjectTimeline['tracks'][number],
+        { ...createTrack('audio-main', 1, 'audio'), order: undefined } as unknown as ProjectTimeline['tracks'][number],
+        { ...createTrack('video-overlay', 2, 'video'), order: undefined } as unknown as ProjectTimeline['tracks'][number],
+      ],
+      items: [],
+      transitions: [],
+    });
+
+    const result = migrateProject(project);
+
+    expect(result.project.timeline?.tracks.map((track) => track.id)).toEqual([
+      'video-top',
+      'audio-main',
+      'video-overlay',
+    ]);
+    expect(result.project.timeline?.tracks.map((track) => track.order)).toEqual([0, 1, 2]);
+  });
 });

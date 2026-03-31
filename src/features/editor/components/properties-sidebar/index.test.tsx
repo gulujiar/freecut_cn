@@ -114,4 +114,30 @@ describe('PropertiesSidebar', () => {
     expect(screen.queryByText('2 clips selected')).not.toBeInTheDocument();
     expect(screen.getByTitle('clip-a.mp4, clip-a.wav')).toBeInTheDocument();
   });
+
+  it('hides the clip header when a transition selection takes priority', () => {
+    resetStores([CLIP_A], [CLIP_A.id]);
+    useSelectionStore.setState({
+      selectedTransitionId: 'transition-1',
+      selectionType: 'transition',
+    });
+
+    render(<PropertiesSidebar />);
+
+    expect(screen.getByText('Transition Panel')).toBeInTheDocument();
+    expect(screen.queryByText('clip-a.mp4')).not.toBeInTheDocument();
+  });
+
+  it('hides the clip header when a marker selection takes priority', () => {
+    resetStores([CLIP_A], [CLIP_A.id]);
+    useSelectionStore.setState({
+      selectedMarkerId: 'marker-1',
+      selectionType: 'marker',
+    });
+
+    render(<PropertiesSidebar />);
+
+    expect(screen.getByText('Marker Panel')).toBeInTheDocument();
+    expect(screen.queryByText('clip-a.mp4')).not.toBeInTheDocument();
+  });
 });

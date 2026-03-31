@@ -41,6 +41,10 @@ const WAVEFORM_DIR = 'waveforms';
 // Multi-resolution levels (samples per second)
 export const WAVEFORM_LEVELS = [1000, 200, 50, 10] as const;
 
+function getFloatsPerSample(channels: number): number {
+  return channels >= 2 ? 2 : 1;
+}
+
 interface WaveformHeader {
   duration: number;
   channels: number;
@@ -336,11 +340,12 @@ class WaveformOPFSStorage {
       let dataOffset = headerAndIndexSize;
       for (let i = 0; i < levelCount; i++) {
         const level = waveform.levels[i]!;
+        const floatsPerSample = getFloatsPerSample(waveform.channels);
 
         // Write index entry
         this.writeLevelIndex(view, i, {
           sampleRate: level.sampleRate,
-          sampleCount: level.peaks.length,
+          sampleCount: level.peaks.length / floatsPerSample,
           offset: dataOffset,
         });
 
@@ -441,7 +446,8 @@ class WaveformOPFSStorage {
 
       // Read level index and extract data
       const level = this.readLevelIndex(view, levelIndex);
-      const dataSize = level.sampleCount * 4; // Float32 = 4 bytes
+      const floatsPerSample = getFloatsPerSample(header.channels);
+      const dataSize = level.sampleCount * floatsPerSample * 4; // Float32 = 4 bytes
       const peaks = new Float32Array(buffer.slice(level.offset, level.offset + dataSize));
       return {
         sampleRate: level.sampleRate,
@@ -492,6 +498,7 @@ class WaveformOPFSStorage {
 
       // Read level index
       const level = this.readLevelIndex(view, levelIndex);
+      const floatsPerSample = getFloatsPerSample(header.channels);
 
       // Calculate sample range
       const startSample = Math.max(0, Math.floor(startTime * level.sampleRate));
@@ -504,8 +511,8 @@ class WaveformOPFSStorage {
       if (sampleCount <= 0) return null;
 
       // Extract range from buffer
-      const rangeOffset = level.offset + startSample * 4;
-      const rangeSize = sampleCount * 4;
+      const rangeOffset = level.offset + startSample * floatsPerSample * 4;
+      const rangeSize = sampleCount * floatsPerSample * 4;
       const peaks = new Float32Array(buffer.slice(rangeOffset, rangeOffset + rangeSize));
 
       return {
@@ -545,7 +552,8 @@ class WaveformOPFSStorage {
       const levels: { sampleRate: number; peaks: Float32Array }[] = [];
       for (let i = 0; i < header.levelCount; i++) {
         const levelIndex = this.readLevelIndex(view, i);
-        const dataSize = levelIndex.sampleCount * 4;
+        const floatsPerSample = getFloatsPerSample(header.channels);
+        const dataSize = levelIndex.sampleCount * floatsPerSample * 4;
         const peaks = new Float32Array(
           buffer.slice(levelIndex.offset, levelIndex.offset + dataSize)
         );
@@ -648,4 +656,3 @@ class WaveformOPFSStorage {
 
 // Singleton instance
 export const waveformOPFSStorage = new WaveformOPFSStorage();
-
