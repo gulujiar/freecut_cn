@@ -29,6 +29,15 @@ describe('formatTimelineCommandLabel', () => {
     expect(label).toBe('Auto-keyframe 2 properties');
   });
 
+  it('formats project metadata canvas resize label', () => {
+    const label = formatTimelineCommandLabel({
+      type: 'UPDATE_PROJECT_METADATA',
+      payload: { fields: ['width', 'height'] },
+    });
+
+    expect(label).toBe('Resize canvas');
+  });
+
   it('falls back to title-cased command type', () => {
     const label = formatTimelineCommandLabel({
       type: 'MOVE_ITEMS',
@@ -38,4 +47,3 @@ describe('formatTimelineCommandLabel', () => {
     expect(label).toBe('Move Items (4)');
   });
 });
-
