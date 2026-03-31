@@ -56,6 +56,7 @@ import { AudioVolumeControl } from './audio-volume-control';
 import { JoinIndicators } from './join-indicators';
 import { SegmentStatusOverlays } from './segment-status-overlays';
 import { ToolOperationOverlay } from './tool-operation-overlay';
+import { supportsVisualFadeControls } from './visual-fade-items';
 import {
   getTimelineItemDragParticipation,
   getTimelineItemGestureMode,
@@ -1600,6 +1601,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Composition operations
   const isCompositionItem = item.type === 'composition' || (item.type === 'audio' && !!item.compositionId);
+  const isVisualFadeItem = supportsVisualFadeControls(item);
   const isInsideSubComp = useCompositionNavigationStore((s) => s.activeCompositionId !== null);
   const [videoFadeEdit, setVideoFadeEdit] = useState<{
     handle: AudioFadeHandle;
@@ -1652,10 +1654,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     audioFadeCurveCleanupRef.current?.();
     audioVolumeCleanupRef.current?.();
   }, []);
-  const displayedVideoFadeIn = item.type === 'video'
+  const displayedVideoFadeIn = isVisualFadeItem
     ? (videoFadeEdit?.previewFadeIn ?? item.fadeIn ?? 0)
     : 0;
-  const displayedVideoFadeOut = item.type === 'video'
+  const displayedVideoFadeOut = isVisualFadeItem
     ? (videoFadeEdit?.previewFadeOut ?? item.fadeOut ?? 0)
     : 0;
   const displayedAudioFadeIn = item.type === 'audio'
@@ -1680,12 +1682,12 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     ? (audioVolumeEdit?.previewVolume ?? item.volume ?? 0)
     : 0;
   const videoFadeInPixels = useMemo(
-    () => item.type === 'video' ? getAudioFadePixels(displayedVideoFadeIn, fps, frameToPixels, visualWidth) : 0,
-    [displayedVideoFadeIn, fps, frameToPixels, item.type, visualWidth]
+    () => isVisualFadeItem ? getAudioFadePixels(displayedVideoFadeIn, fps, frameToPixels, visualWidth) : 0,
+    [displayedVideoFadeIn, fps, frameToPixels, isVisualFadeItem, visualWidth]
   );
   const videoFadeOutPixels = useMemo(
-    () => item.type === 'video' ? getAudioFadePixels(displayedVideoFadeOut, fps, frameToPixels, visualWidth) : 0,
-    [displayedVideoFadeOut, fps, frameToPixels, item.type, visualWidth]
+    () => isVisualFadeItem ? getAudioFadePixels(displayedVideoFadeOut, fps, frameToPixels, visualWidth) : 0,
+    [displayedVideoFadeOut, fps, frameToPixels, isVisualFadeItem, visualWidth]
   );
   const videoFadeLineYPercent = 50;
   const audioFadeInPixels = useMemo(
@@ -1795,7 +1797,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const videoControlsRef = useRef<HTMLDivElement>(null);
   const audioControlsRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!videoFadeEdit?.isCommitting || item.type !== 'video') {
+    if (!videoFadeEdit?.isCommitting || !isVisualFadeItem) {
       return;
     }
 
@@ -1809,7 +1811,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if (Math.abs(committedFade - previewFade) <= VIDEO_FADE_EPSILON) {
       setVideoFadeEdit(null);
     }
-  }, [item, videoFadeEdit]);
+  }, [isVisualFadeItem, item, videoFadeEdit]);
   useEffect(() => {
     if (!audioFadeEdit?.isCommitting || item.type !== 'audio') {
       return;
@@ -1859,7 +1861,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }
   }, [audioFadeCurveEdit, item]);
   const handleVideoFadeHandleMouseDown = useCallback((e: React.MouseEvent, handle: AudioFadeHandle) => {
-    if (item.type !== 'video' || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
+    if (!isVisualFadeItem || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
       return;
     }
 
@@ -1935,7 +1937,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [activeTool, displayedVideoFadeIn, displayedVideoFadeOut, fps, item, pixelsToFrame, trackLocked, updateTimelineItem]);
+  }, [activeTool, displayedVideoFadeIn, displayedVideoFadeOut, fps, isVisualFadeItem, item, pixelsToFrame, trackLocked, updateTimelineItem]);
   const handleAudioFadeHandleMouseDown = useCallback((e: React.MouseEvent, handle: AudioFadeHandle) => {
     if (item.type !== 'audio' || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
       return;
@@ -2268,7 +2270,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }
   }, [item, trackLocked, updateTimelineItem]);
   const handleVideoFadeHandleDoubleClick = useCallback((handle: AudioFadeHandle) => {
-    if (item.type !== 'video' || trackLocked) {
+    if (!isVisualFadeItem || trackLocked) {
       return;
     }
 
@@ -2326,9 +2328,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if (Math.abs(item.audioFadeOutCurve ?? 0) > AUDIO_FADE_EPSILON || Math.abs((item.audioFadeOutCurveX ?? 0.52) - 0.52) > AUDIO_FADE_EPSILON) {
       updateTimelineItem(item.id, { audioFadeOutCurve: 0, audioFadeOutCurveX: 0.52 });
     }
-  }, [item, trackLocked, updateTimelineItem]);
+  }, [isVisualFadeItem, item, trackLocked, updateTimelineItem]);
   const contentVisualPreviewItem = useMemo<TimelineItemType>(() => {
-    if (contentPreviewItem.type === 'video' && videoFadeEdit !== null) {
+    if (supportsVisualFadeControls(contentPreviewItem) && videoFadeEdit !== null) {
       return {
         ...contentPreviewItem,
         fadeIn: videoFadeEdit.previewFadeIn,
@@ -2837,7 +2839,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           <div className="absolute inset-px rounded-[3px] overflow-hidden">
             <SegmentStatusOverlays overlays={segmentOverlays} />
 
-            {item.type === 'video' && (
+            {isVisualFadeItem && (
               <div
                 ref={videoControlsRef}
                 className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
@@ -2925,7 +2927,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             />
           </div>
 
-          {item.type === 'video' && (
+          {isVisualFadeItem && (
             <div
               className="absolute inset-x-0 bottom-0 z-30"
               style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
