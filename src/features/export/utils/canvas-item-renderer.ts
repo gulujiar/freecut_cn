@@ -317,8 +317,32 @@ async function renderItemWithCornerPin(
   }
 
   // Draw warped image onto main canvas
+  const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
+  const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
+  const needsFlattenedOpacity = transform.opacity !== 1;
+  let flattenedCornerPinCanvas: OffscreenCanvas | null = null;
+
+  if (needsFlattenedOpacity) {
+    const { canvas, ctx: flattenCtx } = rctx.canvasPool.acquire();
+    flattenedCornerPinCanvas = canvas;
+    if (flattenedCornerPinCanvas.width !== rctx.canvasSettings.width || flattenedCornerPinCanvas.height !== rctx.canvasSettings.height) {
+      flattenedCornerPinCanvas.width = rctx.canvasSettings.width;
+      flattenedCornerPinCanvas.height = rctx.canvasSettings.height;
+    }
+    flattenCtx.clearRect(0, 0, flattenedCornerPinCanvas.width, flattenedCornerPinCanvas.height);
+    drawCornerPinImage(
+      flattenCtx,
+      tempCanvas,
+      itemW,
+      itemH,
+      left,
+      top,
+      item.cornerPin!,
+    );
+  }
+
   ctx.save();
-  if (transform.opacity !== 1) {
+  if (needsFlattenedOpacity) {
     ctx.globalAlpha = transform.opacity;
   }
 
@@ -331,12 +355,18 @@ async function renderItemWithCornerPin(
     ctx.translate(-centerX, -centerY);
   }
 
-  // Item position on canvas
-  const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
-  const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
-
-  drawCornerPinImage(ctx, tempCanvas, itemW, itemH, left, top, item.cornerPin!);
-  ctx.restore();
+  try {
+    if (flattenedCornerPinCanvas) {
+      ctx.drawImage(flattenedCornerPinCanvas, 0, 0);
+    } else {
+      drawCornerPinImage(ctx, tempCanvas, itemW, itemH, left, top, item.cornerPin!);
+    }
+  } finally {
+    ctx.restore();
+    if (flattenedCornerPinCanvas) {
+      rctx.canvasPool.release(flattenedCornerPinCanvas);
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
