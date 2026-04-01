@@ -180,15 +180,17 @@ export class TransitionPipeline {
     }
     if (!this.outputCtx) return null;
 
-    // Upload left and right canvases to GPU textures
+    // Upload left and right canvases to GPU textures.
+    // Canvas 2D stores premultiplied alpha — tell the GPU to keep it as-is
+    // so the shader operates on premultiplied data matching the output canvas.
     this.device.queue.copyExternalImageToTexture(
       { source: leftCanvas, flipY: false },
-      { texture: this.leftTexture },
+      { texture: this.leftTexture, premultipliedAlpha: true },
       { width, height },
     );
     this.device.queue.copyExternalImageToTexture(
       { source: rightCanvas, flipY: false },
-      { texture: this.rightTexture },
+      { texture: this.rightTexture, premultipliedAlpha: true },
       { width, height },
     );
 

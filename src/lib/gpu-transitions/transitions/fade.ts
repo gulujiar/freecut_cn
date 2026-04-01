@@ -25,9 +25,10 @@ fn fadeFragment(input: VertexOutput) -> @location(0) vec4f {
   let left = textureSample(leftTex, texSampler, input.uv);
   let right = textureSample(rightTex, texSampler, input.uv);
 
-  // Equal-power crossfade: outgoing weight = cos(p * PI/2)
-  let t = cos(params.progress * PI * 0.5);
-  return mix(right, left, t);
+  // Smooth cosine interpolation: t = sin²(p·π/2) = ½ − ½·cos(p·π).
+  // Weights (1−t) and t always sum to 1, preserving alpha for soft crop & masks.
+  let t = 0.5 - 0.5 * cos(params.progress * PI);
+  return mix(left, right, t);
 }`,
   packUniforms: (progress, width, height) => {
     return new Float32Array([progress, width, height, 0]);

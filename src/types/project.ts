@@ -1,5 +1,6 @@
 import type { AnimatableProperty, EasingType, EasingConfig } from './keyframe';
 import type { Transition } from './transition';
+import type { CropSettings } from './transform';
 
 export interface Project {
   id: string;
@@ -102,6 +103,7 @@ export interface ProjectTimeline {
       cornerRadius?: number;
       aspectRatioLocked?: boolean;
     };
+    crop?: CropSettings;
     // Audio properties
     volume?: number;
     audioFadeIn?: number;

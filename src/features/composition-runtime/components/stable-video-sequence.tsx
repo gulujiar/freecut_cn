@@ -125,6 +125,11 @@ function areGroupPropsEqual(
         prevItem.durationInFrames !== nextItem.durationInFrames ||
         prevItem.trackVisible !== nextItem.trackVisible ||
         prevItem.muted !== nextItem.muted ||
+        (prevItem.crop?.left ?? 0) !== (nextItem.crop?.left ?? 0) ||
+        (prevItem.crop?.right ?? 0) !== (nextItem.crop?.right ?? 0) ||
+        (prevItem.crop?.top ?? 0) !== (nextItem.crop?.top ?? 0) ||
+        (prevItem.crop?.bottom ?? 0) !== (nextItem.crop?.bottom ?? 0) ||
+        (prevItem.crop?.softness ?? 0) !== (nextItem.crop?.softness ?? 0) ||
         prevItem.cornerPin !== nextItem.cornerPin ||
         prevItem.blendMode !== nextItem.blendMode) {
       return false;

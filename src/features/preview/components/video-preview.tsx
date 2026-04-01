@@ -4161,7 +4161,12 @@ export const VideoPreview = memo(function VideoPreview({
     // cached bitmap for the current frame.
     const unsubscribeGizmo = useGizmoStore.subscribe((state, prev) => {
       if (shouldPreferPlayerForPreview(usePlaybackStore.getState().previewFrame)) return;
-      if (!forceFastScrubOverlay && !isGizmoInteractingRef.current) return;
+      // Without forceFastScrubOverlay, gizmo previews (transform, crop, etc.)
+      // are handled by the DOM Player through React props. Activating the
+      // overlay here would switch from browser video seek (±1 frame) to
+      // mediabunny (exact), causing a visible frame shift — especially at
+      // soft-edge crop boundaries where the content difference is amplified.
+      if (!forceFastScrubOverlay) return;
       const unifiedPreviewChanged = state.preview !== prev.preview;
       const transformPreviewChanged = state.previewTransform !== prev.previewTransform;
       // Gizmo transform changes require an active gizmo; effect preview changes don't.
