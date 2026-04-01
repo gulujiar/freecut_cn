@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useItemsStore, useTransitionsStore } from '@/features/preview/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { useGizmoStore } from '../stores/gizmo-store';
+import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import type { ItemEffect } from '@/types/effects';
 import type { TimelineItem } from '@/types/timeline';
 

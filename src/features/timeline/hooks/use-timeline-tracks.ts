@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { TimelineTrack } from '@/types/timeline';
 import { useTimelineStore } from '../stores/timeline-store';
-import { getTrackKind } from '../utils/classic-tracks';
+import { getTrackKind } from '@/features/timeline/utils/classic-tracks';
 
 function clampTrackVolume(volume: number): number {
   return Math.max(-60, Math.min(12, Math.round(volume * 10) / 10));

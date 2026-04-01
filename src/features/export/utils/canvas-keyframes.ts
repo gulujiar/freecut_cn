@@ -29,6 +29,10 @@ function getVisualFadeOpacity(item: TimelineItem, frame: number, fps: number): n
     return 1;
   }
 
+  if (frame < item.from || frame >= item.from + item.durationInFrames) {
+    return 0;
+  }
+
   const fadeInFrames = Math.min((item.fadeIn ?? 0) * fps, item.durationInFrames);
   const fadeOutFrames = Math.min((item.fadeOut ?? 0) * fps, item.durationInFrames);
   const hasFadeIn = fadeInFrames > 0;

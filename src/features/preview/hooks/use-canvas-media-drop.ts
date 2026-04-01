@@ -369,8 +369,8 @@ export function useCanvasMediaDrop({
     const mediaState = useMediaLibraryStore.getState();
     const currentProjectId = mediaState.currentProjectId;
     const hasExistingProjectVideo = mediaState.mediaItems.some((item) => item.mimeType.startsWith('video/'));
-    let placementProjectSize: { width: number; height: number } | undefined;
-    let preserveInitialPlacement = false;
+
+    let preInspectedMetadata: { type: string; width: number; height: number; fps: number } | null = null;
 
     if (entry.mediaType === 'video' && currentProjectId && !hasExistingProjectVideo) {
       try {
@@ -384,17 +384,7 @@ export function useCanvasMediaDrop({
           return;
         }
 
-        const matchChoice = await useProjectMediaMatchDialogStore.getState().requestProjectMediaMatch(currentProjectId, {
-          fileName: entry.file.name,
-          width: metadata.width,
-          height: metadata.height,
-          fps: metadata.fps,
-        });
-
-        preserveInitialPlacement = shouldPreserveInitialPlacement(matchChoice);
-        if (preserveInitialPlacement) {
-          placementProjectSize = getMatchedProjectSize(metadata) ?? undefined;
-        }
+        preInspectedMetadata = metadata;
       } catch (error) {
         toast.error('Unable to inspect dropped file.', {
           description: error instanceof Error ? error.message : 'Please try again.',
@@ -416,6 +406,23 @@ export function useCanvasMediaDrop({
     if (!isVisualMediaType(importedType)) {
       toast.warning('Drop audio on the timeline instead.');
       return;
+    }
+
+    let placementProjectSize: { width: number; height: number } | undefined;
+    let preserveInitialPlacement = false;
+
+    if (preInspectedMetadata && currentProjectId) {
+      const matchChoice = await useProjectMediaMatchDialogStore.getState().requestProjectMediaMatch(currentProjectId, {
+        fileName: entry.file.name,
+        width: preInspectedMetadata.width,
+        height: preInspectedMetadata.height,
+        fps: preInspectedMetadata.fps,
+      });
+
+      preserveInitialPlacement = shouldPreserveInitialPlacement(matchChoice);
+      if (preserveInitialPlacement) {
+        placementProjectSize = getMatchedProjectSize(preInspectedMetadata) ?? undefined;
+      }
     }
 
     await placeMediaOnCanvas({

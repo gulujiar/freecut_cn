@@ -1841,6 +1841,13 @@ export const VideoPreview = memo(function VideoPreview({
     )) ?? null;
   }, [getTransitionCooldownForWindow, playbackTransitionWindows]);
 
+  /** Like getTransitionWindowForFrame but without cooldown — true only in the active span. */
+  const getActiveTransitionWindowForFrame = useCallback((frame: number) => {
+    return playbackTransitionWindows.find((window) => (
+      frame >= window.startFrame && frame < window.endFrame
+    )) ?? null;
+  }, [playbackTransitionWindows]);
+
   const playbackTransitionOverlayWindows = useMemo(
     () => playbackTransitionWindows.map((window) => ({
       startFrame: window.startFrame,
@@ -2156,6 +2163,21 @@ export const VideoPreview = memo(function VideoPreview({
   }, [getUpcomingTransitionStartFrame, playingComplexTransitionPrearmFrames]);
 
   const forceFastScrubOverlay = showGpuEffectsOverlay;
+
+  /**
+   * Returns true when the overlay should be shown for a paused-on-transition frame.
+   * Uses the ACTIVE span only (no cooldown) so overlays and live-preview invalidators
+   * don't mis-handle post-transition cooldown frames.
+   */
+  const isPausedTransitionOverlayActive = useCallback((frame: number, playbackState: { isPlaying: boolean; previewFrame: number | null }) => {
+    return (
+      !playbackState.isPlaying
+      && playbackState.previewFrame === null
+      && !forceFastScrubOverlay
+      && getActiveTransitionWindowForFrame(frame) !== null
+    );
+  }, [forceFastScrubOverlay, getActiveTransitionWindowForFrame]);
+
   // Styled, animated text can visibly flip between the DOM Player renderer
   // and the fast-scrub canvas renderer. Keep scrub preview on the Player path.
   const preferPlayerForStyledTextScrub = (
@@ -3311,10 +3333,8 @@ export const VideoPreview = memo(function VideoPreview({
             // Without this, a completed old render can re-show the overlay and hide
             // live Player updates (e.g. ruler click + gizmo interaction).
             const isPausedOnTransitionFrame = (
-              !playbackState.isPlaying
-              && playbackState.previewFrame === null
-              && frameToRender === playbackState.currentFrame
-              && getTransitionWindowForFrame(frameToRender) !== null
+              frameToRender === playbackState.currentFrame
+              && isPausedTransitionOverlayActive(frameToRender, playbackState)
             );
             if (
               !shouldShowPlaybackTransitionOverlay
@@ -3963,20 +3983,12 @@ export const VideoPreview = memo(function VideoPreview({
         return;
       }
 
-      const isPausedInsideTransition = (
-        !state.isPlaying
-        && state.previewFrame === null
-        && getTransitionWindowForFrame(state.currentFrame) !== null
-      );
+      const isPausedInsideTransition = isPausedTransitionOverlayActive(state.currentFrame, state);
       const useCurrentFrameAsTarget = (
         forceFastScrubOverlay
         || isPausedInsideTransition
       );
-      const prevIsPausedInsideTransition = (
-        !prev.isPlaying
-        && prev.previewFrame === null
-        && getTransitionWindowForFrame(prev.currentFrame) !== null
-      );
+      const prevIsPausedInsideTransition = isPausedTransitionOverlayActive(prev.currentFrame, prev);
       const prevUseCurrentFrameAsTarget = (
         forceFastScrubOverlay
         || prevIsPausedInsideTransition
@@ -4173,10 +4185,11 @@ export const VideoPreview = memo(function VideoPreview({
     // During corner pin drag, re-render with the live preview values so the
     // scrub overlay reflects the warp in real-time instead of waiting for commit.
     const unsubscribeCornerPin = useCornerPinStore.subscribe((state, prev) => {
-      if (!forceFastScrubOverlay) return;
       if (state.previewCornerPin === prev.previewCornerPin) return;
+      const playbackState = usePlaybackStore.getState();
+      if (!forceFastScrubOverlay && !isPausedTransitionOverlayActive(playbackState.currentFrame, playbackState)) return;
 
-      const currentFrame = usePlaybackStore.getState().currentFrame;
+      const currentFrame = playbackState.currentFrame;
       if (scrubRendererRef.current) {
         scrubRendererRef.current.invalidateFrameCache({ frames: [currentFrame] });
       }
@@ -4192,7 +4205,7 @@ export const VideoPreview = memo(function VideoPreview({
       const playbackState = usePlaybackStore.getState();
       if (shouldPreferPlayerForPreview(playbackState.previewFrame)) return;
       const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
-      if (!forceFastScrubOverlay && playbackState.previewFrame === null) return;
+      if (!forceFastScrubOverlay && playbackState.previewFrame === null && !isPausedTransitionOverlayActive(targetFrame, playbackState)) return;
 
       if (scrubRendererRef.current) {
         scrubRendererRef.current.invalidateFrameCache({ frames: [targetFrame] });
@@ -4276,12 +4289,7 @@ export const VideoPreview = memo(function VideoPreview({
 
     // Paused inside a transition on initial mount — trigger a render so
     // the GPU transition is visible without forceFastScrubOverlay.
-    if (
-      !initialPlaybackState.isPlaying
-      && initialPlaybackState.previewFrame === null
-      && !forceFastScrubOverlay
-      && getTransitionWindowForFrame(initialPlaybackState.currentFrame) !== null
-    ) {
+    if (isPausedTransitionOverlayActive(initialPlaybackState.currentFrame, initialPlaybackState)) {
       scrubRequestedFrameRef.current = initialPlaybackState.currentFrame;
       void pumpRenderLoop();
     }
@@ -4409,6 +4417,7 @@ export const VideoPreview = memo(function VideoPreview({
     getTransitionWindowForFrame,
     hideFastScrubOverlay,
     hidePlaybackTransitionOverlay,
+    isPausedTransitionOverlayActive,
     pinTransitionPlaybackSession,
     preparePlaybackTransitionFrame,
     showPlaybackTransitionOverlayForFrame,

@@ -154,7 +154,7 @@ export const RESOLUTION_PRESETS = [
  */
 export const FPS_PRESETS = [
   ...DEFAULT_PROJECT_FPS_OPTIONS,
-] as const;
+];
 
 /**
  * Default form values

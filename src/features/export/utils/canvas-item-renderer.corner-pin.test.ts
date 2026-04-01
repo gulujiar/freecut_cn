@@ -191,6 +191,7 @@ describe('canvas-item-renderer corner pin export path', () => {
     expect(canvasPool.acquire).toHaveBeenCalledTimes(1);
     expect(mockFns.drawCornerPinImageMock).toHaveBeenCalledTimes(1);
     expect(mockFns.drawCornerPinImageMock.mock.calls[0]?.[0]).toBe(flattenedCtx);
+    expect(ctx.globalAlpha).toBe(0.35);
     expect(ctx.drawImage).toHaveBeenCalledWith(flattenedCanvas, 0, 0);
     expect(canvasPool.release).toHaveBeenCalledWith(flattenedCanvas);
   });

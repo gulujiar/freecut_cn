@@ -12,7 +12,7 @@ import type { TimelineTrack } from '@/types/timeline';
 import { useTrackDrag } from '../hooks/use-track-drag';
 import { TIMELINE_SIDEBAR_WIDTH } from '../constants';
 import { useItemsStore } from '../stores/items-store';
-import { getTrackKind } from '../utils/classic-tracks';
+import { getTrackKind } from '@/features/timeline/utils/classic-tracks';
 
 interface TrackHeaderProps {
   track: TimelineTrack;

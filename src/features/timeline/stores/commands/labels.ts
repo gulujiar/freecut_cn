@@ -59,6 +59,10 @@ export function formatTimelineCommandLabel(command: TimelineCommand): string {
       ? command.payload.fields.filter((field): field is string => typeof field === 'string')
       : [];
 
+    if (fields.includes('fps') && (fields.includes('width') || fields.includes('height'))) {
+      return 'Resize canvas and change frame rate';
+    }
+
     if (fields.includes('width') || fields.includes('height')) {
       return 'Resize canvas';
     }

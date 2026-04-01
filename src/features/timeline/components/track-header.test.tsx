@@ -77,4 +77,16 @@ describe('TrackHeader', () => {
     expect(screen.queryByRole('button', { name: 'Show track' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Unmute track' })).not.toBeInTheDocument();
   });
+
+  it('calls onToggleDisabled when clicking Enable track on a muted audio track', () => {
+    const onToggleDisabled = vi.fn();
+    renderTrackHeader(
+      makeTrack({ id: 'track-3', name: 'A2', kind: 'audio', muted: true }),
+      onToggleDisabled,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Enable track' }));
+
+    expect(onToggleDisabled).toHaveBeenCalledTimes(1);
+  });
 });

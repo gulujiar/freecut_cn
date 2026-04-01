@@ -50,7 +50,7 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
       : null;
 
   const getHandleClassName = () => cn(
-    'absolute h-2.5 w-2.5 -translate-x-1/2 rounded-[2px] border pointer-events-auto transition-opacity cursor-ew-resize touch-none before:absolute before:-inset-[9px] before:content-[""] after:absolute after:left-1/2 after:top-full after:-translate-x-1/2 after:border-l-[3px] after:border-r-[3px] after:border-t-[4px] after:border-l-transparent after:border-r-transparent focus-visible:outline-none',
+    'absolute h-2.5 w-2.5 -translate-x-1/2 rounded-[2px] border pointer-events-auto transition-opacity cursor-ew-resize touch-none before:absolute before:-inset-[9px] before:content-[""] after:absolute after:left-1/2 after:top-full after:-translate-x-1/2 after:border-l-[3px] after:border-r-[3px] after:border-t-[4px] after:border-l-transparent after:border-r-transparent',
     'border-slate-950/70 bg-white after:border-t-white/90 shadow-[0_0_0_1px_rgba(15,23,42,0.25)]',
     handleVisibilityClass,
   );
@@ -59,6 +59,8 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
     <div className="absolute inset-0 pointer-events-none z-30">
       <button
         type="button"
+        tabIndex={-1}
+        aria-hidden="true"
         className={getHandleClassName()}
         style={{ left: `${fadeInLeft}px`, top: '-2px' }}
         onClick={(e) => {
@@ -73,10 +75,11 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
         }}
         onMouseEnter={() => setHoveredHandle('in')}
         onMouseLeave={() => setHoveredHandle((current) => (current === 'in' ? null : current))}
-        aria-label="Adjust video fade in"
       />
       <button
         type="button"
+        tabIndex={-1}
+        aria-hidden="true"
         className={getHandleClassName()}
         style={{ left: `${fadeOutLeft}px`, top: '-2px' }}
         onClick={(e) => {
@@ -91,7 +94,6 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
         }}
         onMouseEnter={() => setHoveredHandle('out')}
         onMouseLeave={() => setHoveredHandle((current) => (current === 'out' ? null : current))}
-        aria-label="Adjust video fade out"
       />
 
       {hoveredHandle && visibleLabel && (

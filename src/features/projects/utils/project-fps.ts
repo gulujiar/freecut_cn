@@ -23,7 +23,6 @@ export const ALLOWED_PROJECT_FPS_VALUES = [
 
 const AUTO_MATCH_PROJECT_FPS_VALUES = [
   ...DEFAULT_PROJECT_FPS_OPTIONS.map((option) => option.value),
-  120,
 ] as const;
 
 export function isAllowedProjectFps(value: number): boolean {

@@ -166,11 +166,11 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     );
   }, [rasterSvgMaskDataUrl, state.maskType, state.svgMaskId, state.svgMaskPaths, state.maskFeather, state.maskInvert, canvasWidth, canvasHeight]);
 
-  const maskContainerStyle = useMemo((): React.CSSProperties => {
-    if (state.maskType === null) {
-      return {};
-    }
+  const blendModeCss = item.blendMode && item.blendMode !== 'normal'
+    ? BLEND_MODE_CSS[item.blendMode]
+    : undefined;
 
+  const maskContainerStyle = useMemo((): React.CSSProperties => {
     return {
       position: 'absolute',
       left: 0,
@@ -178,8 +178,58 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
       width: '100%',
       height: '100%',
       ...maskStyle,
+      mixBlendMode: blendModeCss,
     };
-  }, [state.maskType, maskStyle]);
+  }, [maskStyle, blendModeCss]);
+
+  const innerContent = (
+    <>
+      {/* Corner Pin wrapper (only when active) */}
+      {/* When corner pin is active, will-change + backfaceVisibility force Chrome
+          to composite through the CSS pipeline instead of video hardware overlay,
+          which would otherwise ignore the matrix3d transform. */}
+      <div
+        style={cornerPinStyle ? {
+          width: '100%',
+          height: '100%',
+          ...cornerPinStyle,
+          willChange: 'transform',
+          backfaceVisibility: 'hidden' as const,
+          overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
+        } : {
+          width: '100%',
+          height: '100%',
+        }}
+      >
+        {/* Inner: Effects + Content */}
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            position: 'relative',
+            filter: state.cssFilter || undefined,
+          }}
+        >
+          {children}
+        </div>
+      </div>
+    </>
+  );
+
+  // When there's no mask, skip the full-canvas mask container div entirely
+  if (state.maskType === null) {
+    return (
+      <div
+        style={{
+          ...state.transformStyle,
+          overflow: state.transform.cornerRadius > 0 && !cornerPinStyle ? 'hidden' : undefined,
+          mixBlendMode: blendModeCss,
+        }}
+      >
+        {innerContent}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -193,40 +243,9 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
           style={{
             ...state.transformStyle,
             overflow: state.transform.cornerRadius > 0 && !cornerPinStyle ? 'hidden' : undefined,
-            mixBlendMode: item.blendMode && item.blendMode !== 'normal'
-              ? BLEND_MODE_CSS[item.blendMode]
-              : undefined,
           }}
         >
-          {/* Corner Pin wrapper (only when active) */}
-          {/* When corner pin is active, will-change + backfaceVisibility force Chrome
-              to composite through the CSS pipeline instead of video hardware overlay,
-              which would otherwise ignore the matrix3d transform. */}
-          <div
-            style={cornerPinStyle ? {
-              width: '100%',
-              height: '100%',
-              ...cornerPinStyle,
-              willChange: 'transform',
-              backfaceVisibility: 'hidden' as const,
-              overflow: state.transform.cornerRadius > 0 ? 'hidden' : undefined,
-            } : {
-              width: '100%',
-              height: '100%',
-            }}
-          >
-            {/* Inner: Effects + Content */}
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                position: 'relative',
-                filter: state.cssFilter || undefined,
-              }}
-            >
-              {children}
-            </div>
-          </div>
+          {innerContent}
         </div>
       </div>
     </>

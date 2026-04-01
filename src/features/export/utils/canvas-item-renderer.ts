@@ -320,26 +320,6 @@ async function renderItemWithCornerPin(
   const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
   const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
   const needsFlattenedOpacity = transform.opacity !== 1;
-  let flattenedCornerPinCanvas: OffscreenCanvas | null = null;
-
-  if (needsFlattenedOpacity) {
-    const { canvas, ctx: flattenCtx } = rctx.canvasPool.acquire();
-    flattenedCornerPinCanvas = canvas;
-    if (flattenedCornerPinCanvas.width !== rctx.canvasSettings.width || flattenedCornerPinCanvas.height !== rctx.canvasSettings.height) {
-      flattenedCornerPinCanvas.width = rctx.canvasSettings.width;
-      flattenedCornerPinCanvas.height = rctx.canvasSettings.height;
-    }
-    flattenCtx.clearRect(0, 0, flattenedCornerPinCanvas.width, flattenedCornerPinCanvas.height);
-    drawCornerPinImage(
-      flattenCtx,
-      tempCanvas,
-      itemW,
-      itemH,
-      left,
-      top,
-      item.cornerPin!,
-    );
-  }
 
   ctx.save();
   if (needsFlattenedOpacity) {
@@ -356,16 +336,32 @@ async function renderItemWithCornerPin(
   }
 
   try {
-    if (flattenedCornerPinCanvas) {
-      ctx.drawImage(flattenedCornerPinCanvas, 0, 0);
+    if (needsFlattenedOpacity) {
+      const { canvas: flatCanvas, ctx: flatCtx } = rctx.canvasPool.acquire();
+      try {
+        if (flatCanvas.width !== rctx.canvasSettings.width || flatCanvas.height !== rctx.canvasSettings.height) {
+          flatCanvas.width = rctx.canvasSettings.width;
+          flatCanvas.height = rctx.canvasSettings.height;
+        }
+        flatCtx.clearRect(0, 0, flatCanvas.width, flatCanvas.height);
+        drawCornerPinImage(
+          flatCtx,
+          tempCanvas,
+          itemW,
+          itemH,
+          left,
+          top,
+          item.cornerPin!,
+        );
+        ctx.drawImage(flatCanvas, 0, 0);
+      } finally {
+        rctx.canvasPool.release(flatCanvas);
+      }
     } else {
       drawCornerPinImage(ctx, tempCanvas, itemW, itemH, left, top, item.cornerPin!);
     }
   } finally {
     ctx.restore();
-    if (flattenedCornerPinCanvas) {
-      rctx.canvasPool.release(flattenedCornerPinCanvas);
-    }
   }
 }
 

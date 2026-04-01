@@ -52,16 +52,18 @@ describe('mask-info helpers', () => {
   });
 
   it('returns a new array when any mask transform changes', () => {
-    const previous = [createMaskInfo('mask-1')];
-    const next = [createMaskInfo('mask-1', 0, { x: 42 })];
+    const sharedShape = { id: 'mask-1' } as MaskInfo['shape'];
+    const previous = [createMaskInfo('mask-1', 0, {}, sharedShape)];
+    const next = [createMaskInfo('mask-1', 0, { x: 42 }, sharedShape)];
 
     expect(reuseStableMaskInfos(previous, next)).toEqual(next);
     expect(reuseStableMaskInfos(previous, next)).not.toBe(previous);
   });
 
   it('returns a new array when any mask track order changes', () => {
-    const previous = [createMaskInfo('mask-1', 0)];
-    const next = [createMaskInfo('mask-1', 1)];
+    const sharedShape = { id: 'mask-1' } as MaskInfo['shape'];
+    const previous = [createMaskInfo('mask-1', 0, {}, sharedShape)];
+    const next = [createMaskInfo('mask-1', 1, {}, sharedShape)];
 
     expect(reuseStableMaskInfos(previous, next)).toEqual(next);
     expect(reuseStableMaskInfos(previous, next)).not.toBe(previous);

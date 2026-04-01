@@ -80,7 +80,7 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
       return;
     }
 
-    const firstVideo = [...newVideos].sort((left, right) => right.createdAt - left.createdAt)[0];
+    const firstVideo = [...newVideos].sort((left, right) => left.createdAt - right.createdAt)[0];
     if (!firstVideo) {
       return;
     }

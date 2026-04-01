@@ -16,8 +16,8 @@ describe('project-fps helpers', () => {
   it('maps common source rates to the closest supported project fps', () => {
     expect(resolveAutoMatchProjectFps(29.97)).toEqual({ fps: 30, exact: false });
     expect(resolveAutoMatchProjectFps(59.94)).toEqual({ fps: 60, exact: false });
-    expect(resolveAutoMatchProjectFps(120)).toEqual({ fps: 120, exact: true });
-    expect(resolveAutoMatchProjectFps(240)).toEqual({ fps: 120, exact: false });
+    expect(resolveAutoMatchProjectFps(120)).toEqual({ fps: 60, exact: false });
+    expect(resolveAutoMatchProjectFps(240)).toEqual({ fps: 60, exact: false });
   });
 
   it('formats integer and decimal fps values cleanly', () => {

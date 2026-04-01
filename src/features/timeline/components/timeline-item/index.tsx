@@ -1861,6 +1861,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }
   }, [audioFadeCurveEdit, item]);
   const handleVideoFadeHandleMouseDown = useCallback((e: React.MouseEvent, handle: AudioFadeHandle) => {
+    if (e.button !== 0) return;
     if (!isVisualFadeItem || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
       return;
     }
@@ -3128,6 +3129,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     prevItem.audioFadeOutCurve === nextItem.audioFadeOutCurve &&
     prevItem.audioFadeInCurveX === nextItem.audioFadeInCurveX &&
     prevItem.audioFadeOutCurveX === nextItem.audioFadeOutCurveX &&
+    prevItem.fadeIn === nextItem.fadeIn &&
+    prevItem.fadeOut === nextItem.fadeOut &&
     prevIsMask === nextIsMask &&
     prevProps.timelineDuration === nextProps.timelineDuration &&
     prevProps.trackLocked === nextProps.trackLocked &&
