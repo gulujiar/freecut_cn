@@ -158,6 +158,23 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const externalPreviewTokenRef = useRef(0);
   const lastDragFrameRef = useRef(0);
 
+  // Resolve whether this track is effectively disabled for drops.
+  // A track is drop-disabled when it's locked, hidden (video), or muted (audio),
+  // including state inherited from a parent group track.
+  const isDropDisabled = useTimelineStore((s) => {
+    const parentGroup = track.parentTrackId
+      ? s.tracks.find((t) => t.id === track.parentTrackId)
+      : undefined;
+    const locked = track.locked || (parentGroup?.locked ?? false);
+    if (locked) return true;
+    const visible = track.visible !== false && (parentGroup?.visible !== false);
+    const muted = track.muted || (parentGroup?.muted ?? false);
+    const kind = track.kind;
+    if (kind === 'audio') return muted;
+    if (kind === 'video') return !visible;
+    return !visible || muted;
+  });
+
   // Virtualized items/transitions â€” only those overlapping the visible viewport + buffer
   const { visibleItems: trackItems, visibleTransitions: trackTransitions } = useVisibleItems(track.id);
   // Full item count â€” used for context menu guard (must not depend on virtualized subset)
@@ -556,7 +573,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (track.locked) {
+    if (isDropDisabled) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'none';
       return;
@@ -734,7 +751,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     clearTrackGhostPreviews();
     clearExternalPreviewSession();
 
-    if (track.locked) {
+    if (isDropDisabled) {
       return;
     }
 

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, FileAudio, Image as ImageIcon, MoreVertical, Trash2, Loader2, Link2Off, RefreshCw, Zap, FileText } from 'lucide-react';
 import {
   DropdownMenu,
@@ -56,6 +56,8 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
   const hasProxy = proxyStatus === 'ready';
   const hasTranscript = transcriptStatus === 'ready';
   const isTranscribing = transcriptStatus === 'transcribing';
+  const thumbnailRef = useRef<HTMLImageElement>(null);
+  const dragImageRef = useRef<HTMLDivElement | null>(null);
 
   // Load thumbnail on mount and when thumbnailId changes (e.g. after regeneration)
   useEffect(() => {
@@ -153,7 +155,7 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
     }
   };
 
-  const handleDragStart = (e: React.DragEvent) => {
+  const handleDragStart = useCallback((e: React.DragEvent) => {
     // Set drag data for timeline drop
     e.dataTransfer.effectAllowed = 'copy';
 
@@ -195,11 +197,35 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
       // Cache for dragover access
       setMediaDragData(dragData);
     }
-  };
 
-  const handleDragEnd = () => {
+    // Custom drag image: show just the thumbnail at natural aspect ratio
+    const thumbEl = thumbnailRef.current;
+    if (thumbEl && thumbEl.naturalWidth > 0) {
+      const maxDim = 120;
+      const ratio = thumbEl.naturalWidth / thumbEl.naturalHeight;
+      const w = ratio >= 1 ? maxDim : Math.round(maxDim * ratio);
+      const h = ratio >= 1 ? Math.round(maxDim / ratio) : maxDim;
+
+      const ghost = document.createElement('div');
+      ghost.style.cssText = `position:fixed;top:-9999px;left:-9999px;width:${w}px;height:${h}px;border-radius:4px;overflow:hidden;opacity:0.85;`;
+      const img = document.createElement('img');
+      img.src = thumbEl.src;
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+      ghost.appendChild(img);
+      document.body.appendChild(ghost);
+      dragImageRef.current = ghost;
+
+      e.dataTransfer.setDragImage(ghost, w / 2, h / 2);
+    }
+  }, [selectedMediaIds, media.id, media.fileName, media.duration, mediaItems, mediaType]);
+
+  const handleDragEnd = useCallback(() => {
     clearMediaDragData();
-  };
+    if (dragImageRef.current) {
+      document.body.removeChild(dragImageRef.current);
+      dragImageRef.current = null;
+    }
+  }, []);
 
   const handleClick = (e: React.MouseEvent) => {
     onSelect?.(e);
@@ -394,6 +420,7 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
       <div className="flex-1 bg-secondary relative overflow-hidden min-h-0">
         {thumbnailUrl ? (
           <img
+            ref={thumbnailRef}
             src={thumbnailUrl}
             alt={media.fileName}
             className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"

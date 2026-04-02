@@ -2,6 +2,7 @@ import { memo, useCallback, useMemo } from 'react';
 import { Link2 } from 'lucide-react';
 import type { TimelineItem } from '@/types/timeline';
 import { ClipFilmstrip } from '../clip-filmstrip';
+import { ImageFilmstrip } from '../clip-filmstrip/image-filmstrip';
 import { ClipWaveform } from '../clip-waveform';
 import { CompoundClipWaveform } from '../clip-waveform/compound-clip-waveform';
 import { useSettingsStore } from '@/features/timeline/deps/settings';
@@ -12,6 +13,7 @@ import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { summarizeCompositionClipContent } from '../../utils/composition-clip-summary';
 import { hasLinkedAudioCompanion } from '@/shared/utils/linked-media';
 import { formatSignedFrameDelta } from '@/utils/time-utils';
+import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 
 interface ClipContentProps {
   item: TimelineItem;
@@ -390,7 +392,43 @@ export const ClipContent = memo(function ClipContent({
     );
   }
 
-  // Default for image and shape items - simple label
+  // Image items - label + filmstrip
+  if (item.type === 'image' && item.src && item.mediaId) {
+    const label = item.label?.toLowerCase() ?? '';
+    const isAnimatedGif = isGifUrl(item.src) || label.endsWith('.gif');
+    const isAnimatedWebp = isWebpUrl(item.src) || label.endsWith('.webp');
+    const isAnimated = isAnimatedGif || isAnimatedWebp;
+
+    return (
+      <div className="absolute inset-0 flex flex-col">
+        <div
+          className="px-2 text-[11px] font-medium truncate shrink-0"
+          style={{
+            height: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
+            lineHeight: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
+          }}
+        >
+          {renderTitleText(item.label)}
+        </div>
+        <div className="relative overflow-hidden flex-1 min-h-0">
+          {showFilmstrips && (
+            <ImageFilmstrip
+              mediaId={item.mediaId}
+              isAnimated={isAnimated}
+              animationFormat={isAnimatedWebp ? 'webp' : 'gif'}
+              clipWidth={clipWidth}
+              isVisible={isClipVisible}
+              src={item.src}
+              speed={item.speed ?? 1}
+              fps={fps}
+            />
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Default for shape items - simple label
   return (
     <div className="px-2 py-1 text-xs font-medium truncate">
       {item.label}

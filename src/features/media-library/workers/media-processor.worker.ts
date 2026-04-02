@@ -285,9 +285,45 @@ async function extractAudioMetadata(file: File): Promise<AudioMetadata> {
 }
 
 /**
- * Extract image metadata using createImageBitmap
+ * Parse SVG dimensions from XML content.
+ * Tries width/height attributes first, then viewBox.
+ */
+function parseSvgDimensions(svgText: string): { width: number; height: number } | null {
+  const svgMatch = svgText.match(/<svg[^>]*>/i);
+  if (!svgMatch) return null;
+
+  const tag = svgMatch[0];
+
+  const wAttr = tag.match(/\bwidth=["'](\d+(?:\.\d+)?)/);
+  const hAttr = tag.match(/\bheight=["'](\d+(?:\.\d+)?)/);
+  if (wAttr && hAttr) {
+    return { width: Math.round(parseFloat(wAttr[1]!)), height: Math.round(parseFloat(hAttr[1]!)) };
+  }
+
+  const vb = tag.match(/viewBox=["']\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/);
+  if (vb) {
+    return { width: Math.round(parseFloat(vb[3]!)), height: Math.round(parseFloat(vb[4]!)) };
+  }
+
+  return null;
+}
+
+/**
+ * Extract image metadata using createImageBitmap.
+ * Falls back to SVG XML parsing for SVG files (createImageBitmap
+ * doesn't support SVGs in web workers).
  */
 async function extractImageMetadata(file: File): Promise<ImageMetadata> {
+  if (file.type === 'image/svg+xml') {
+    const text = await file.text();
+    const dims = parseSvgDimensions(text);
+    return {
+      type: 'image',
+      width: dims?.width ?? 800,
+      height: dims?.height ?? 600,
+    };
+  }
+
   const bitmap = await createImageBitmap(file);
   const metadata: ImageMetadata = {
     type: 'image',
@@ -362,6 +398,12 @@ async function generateImageThumbnail(
   maxSize: number,
   quality: number
 ): Promise<Blob> {
+  // SVG thumbnails can't be generated in workers (createImageBitmap doesn't
+  // support SVGs here). The main thread handles SVG thumbnail fallback.
+  if (file.type === 'image/svg+xml') {
+    throw new Error('SVG thumbnail generation not supported in worker');
+  }
+
   const bitmap = await createImageBitmap(file);
 
   // Calculate dimensions preserving aspect ratio

@@ -216,13 +216,23 @@ class MediaLibraryService {
     );
 
     // Stage 5: Save thumbnail if generated
-    if (thumbnail) {
+    // SVG thumbnails can't be generated in the worker (createImageBitmap doesn't
+    // support SVGs in workers), so fall back to main-thread generation.
+    let thumbnailBlob = thumbnail;
+    if (!thumbnailBlob && resolvedMimeType === 'image/svg+xml') {
+      try {
+        thumbnailBlob = await generateThumbnail(file, { maxSize: 320, quality: 0.6 });
+      } catch (error) {
+        logger.warn('Failed to generate SVG thumbnail on main thread:', error);
+      }
+    }
+    if (thumbnailBlob) {
       try {
         thumbnailId = crypto.randomUUID();
         const thumbnailData: ThumbnailData = {
           id: thumbnailId,
           mediaId: id,
-          blob: thumbnail,
+          blob: thumbnailBlob,
           timestamp: 1,
           width: 320,
           height: 180,
