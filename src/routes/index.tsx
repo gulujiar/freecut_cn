@@ -32,9 +32,9 @@ const faqItems = [
     answer: (
       <>
         <p className="mb-3">
-          FreeCut currently supports Google Chrome version 102+. We use modern
-          browser APIs like WebCodecs and File System Access which have limited
-          cross-browser support.
+          FreeCut currently works best in Chrome or Edge 113+. It relies on
+          modern browser APIs like WebGPU, WebCodecs, OPFS, and File System
+          Access, so the full workflow is currently Chromium-first.
         </p>
         <p>
           <strong>Brave users:</strong> The File System Access API is disabled by
@@ -49,11 +49,11 @@ const faqItems = [
   },
   {
     question: 'What export formats are supported?',
-    answer: 'Video: MP4, MOV, WebM, MKV. Audio: MP3, AAC, WAV. Multiple codecs (H.264, H.265, VP8, VP9) and quality settings available.',
+    answer: 'Video: MP4, MOV, WebM, MKV. Audio: MP3, AAC, WAV. The current export UI exposes H.264, H.265, VP8, and VP9 with low, medium, high, and ultra quality presets.',
   },
   {
     question: 'Future Improvements',
-    answer: 'Will add features as I see fit and based on feedback. Maybe come up with a roadmap or something.',
+    answer: 'The current focus is beta hardening: align product docs with shipped behavior, tighten accessibility and test coverage, and make defaults like FPS, snap, preview quality, and export settings flow through the real editor.',
   },
   {
     question: 'Special shoutout',

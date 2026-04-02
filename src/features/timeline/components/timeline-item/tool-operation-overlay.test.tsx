@@ -42,7 +42,7 @@ describe('ToolOperationOverlay', () => {
 
     expect(screen.getByTestId('tool-operation-bounds-box')).toHaveStyle({
       top: '0px',
-      height: '32px',
+      height: `${EDITOR_LAYOUT.timelineClipLabelRowHeight * 2}px`,
     });
   });
 

@@ -61,6 +61,32 @@ import type { MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/
 
 const log = createLogger('SettingsDialog');
 
+const DEFAULT_FPS_OPTIONS = [
+  { value: 24, label: '24 fps (Film)' },
+  { value: 25, label: '25 fps (PAL)' },
+  { value: 30, label: '30 fps (Standard)' },
+  { value: 50, label: '50 fps (PAL High)' },
+  { value: 60, label: '60 fps (Smooth)' },
+] as const;
+
+const PREVIEW_QUALITY_OPTIONS = [
+  { value: 'low', label: 'Low', description: 'Fastest scrubbing with the softest preview.' },
+  { value: 'medium', label: 'Medium', description: 'Balanced preview speed and clarity.' },
+  { value: 'high', label: 'High', description: 'Full-quality preview when your machine can handle it.' },
+] as const;
+
+const EXPORT_FORMAT_OPTIONS = [
+  { value: 'mp4', label: 'MP4', description: 'Best default for compatibility.' },
+  { value: 'webm', label: 'WebM', description: 'Best default for VP8/VP9 web delivery.' },
+] as const;
+
+const EXPORT_QUALITY_OPTIONS = [
+  { value: 'low', label: 'Low (Faster, smaller files)' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High (Recommended)' },
+  { value: 'ultra', label: 'Ultra (Slower, larger files)' },
+] as const;
+
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -191,9 +217,14 @@ async function regenerateProjectThumbnails(
 }
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+  const defaultFps = useSettingsStore((s) => s.defaultFps);
+  const snapEnabled = useSettingsStore((s) => s.snapEnabled);
   const editorDensity = useSettingsStore((s) => s.editorDensity);
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
+  const previewQuality = useSettingsStore((s) => s.previewQuality);
+  const defaultExportFormat = useSettingsStore((s) => s.defaultExportFormat);
+  const defaultExportQuality = useSettingsStore((s) => s.defaultExportQuality);
   const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval);
   const maxUndoHistory = useSettingsStore((s) => s.maxUndoHistory);
   const dualDecoderTransitions = useSettingsStore((s) => s.dualDecoderTransitions);
@@ -330,6 +361,34 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             <section className="space-y-3">
               <h3 className="text-sm font-medium text-muted-foreground">Timeline</h3>
               <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Default Project FPS</Label>
+                  <Select
+                    value={String(defaultFps)}
+                    onValueChange={(value) => setSetting('defaultFps', Number(value))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DEFAULT_FPS_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={String(option.value)}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Used as the starting frame rate for new projects before you change it in the create-project form.
+                  </p>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm">Snap by Default</Label>
+                    <p className="text-xs text-muted-foreground">Sets the initial snap state when a project opens.</p>
+                  </div>
+                  <Switch checked={snapEnabled} onCheckedChange={(v) => setSetting('snapEnabled', v)} />
+                </div>
                 <div className="flex items-center justify-between">
                   <Label className="text-sm">Show Waveforms</Label>
                   <Switch checked={showWaveforms} onCheckedChange={(v) => setSetting('showWaveforms', v)} />
@@ -337,6 +396,78 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <div className="flex items-center justify-between">
                   <Label className="text-sm">Show Filmstrips</Label>
                   <Switch checked={showFilmstrips} onCheckedChange={(v) => setSetting('showFilmstrips', v)} />
+                </div>
+              </div>
+            </section>
+
+            {/* Preview */}
+            <section className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground">Preview</h3>
+              <div className="space-y-1.5">
+                <Label className="text-sm">Preview Quality</Label>
+                <Select
+                  value={previewQuality}
+                  onValueChange={(value) => setSetting('previewQuality', value as typeof previewQuality)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PREVIEW_QUALITY_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {PREVIEW_QUALITY_OPTIONS.find((option) => option.value === previewQuality)?.description}
+                </p>
+              </div>
+            </section>
+
+            {/* Export */}
+            <section className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground">Export</h3>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Default Video Format</Label>
+                  <Select
+                    value={defaultExportFormat}
+                    onValueChange={(value) => setSetting('defaultExportFormat', value as typeof defaultExportFormat)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EXPORT_FORMAT_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {EXPORT_FORMAT_OPTIONS.find((option) => option.value === defaultExportFormat)?.description}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Default Quality</Label>
+                  <Select
+                    value={defaultExportQuality}
+                    onValueChange={(value) => setSetting('defaultExportQuality', value as typeof defaultExportQuality)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {EXPORT_QUALITY_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             </section>

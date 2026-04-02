@@ -56,6 +56,7 @@ import { resolveMediaUrls } from '@/features/timeline/deps/media-library-resolve
 import { mediaLibraryService } from '@/features/timeline/deps/media-library-service';
 import { validateProjectMediaReferences } from '@/features/timeline/utils/media-validation';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
+import { useSettingsStore } from '@/features/timeline/deps/settings-contract';
 import { migrateProject, CURRENT_SCHEMA_VERSION } from '@/domain/projects/migrations';
 import {
   needsLegacyAvTrackLayoutRepair,
@@ -878,8 +879,8 @@ async function loadTimeline(
     // Common setup for both cases
     // fps is stored in project.metadata, not timeline
     useTimelineSettingsStore.getState().setFps(project.metadata?.fps || 30);
-    // snapEnabled is UI state, default to true
-    useTimelineSettingsStore.getState().setSnapEnabled(true);
+    // snapEnabled is UI state, seeded from the app-level default
+    useTimelineSettingsStore.getState().setSnapEnabled(useSettingsStore.getState().snapEnabled);
     useTimelineSettingsStore.getState().markClean();
 
     // Clear undo history when loading

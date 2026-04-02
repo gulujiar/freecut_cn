@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Link } from '@tanstack/react-router';
+import { useSettingsStore } from '@/features/projects/deps/settings-contract';
 import {
   projectFormSchema,
   type ProjectFormData,
@@ -32,15 +33,26 @@ export function ProjectForm({
   isSubmitting = false,
   hideHeader = false,
 }: ProjectFormProps) {
+  const defaultFps = useSettingsStore((s) => s.defaultFps);
+  const resolvedDefaultValues = useMemo(
+    () => ({
+      ...DEFAULT_PROJECT_VALUES,
+      fps: defaultFps,
+      ...defaultValues,
+    }),
+    [defaultFps, defaultValues]
+  );
+
   const {
     register,
     handleSubmit,
     formState: { errors, isValid },
     watch,
     setValue,
+    reset,
   } = useForm<ProjectFormData>({
     resolver: zodResolver(projectFormSchema),
-    defaultValues: defaultValues || DEFAULT_PROJECT_VALUES,
+    defaultValues: resolvedDefaultValues,
     mode: 'onChange',
   });
 
@@ -49,19 +61,23 @@ export function ProjectForm({
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(() =>
     matchTemplateId(
-      defaultValues?.width ?? DEFAULT_PROJECT_VALUES.width,
-      defaultValues?.height ?? DEFAULT_PROJECT_VALUES.height
+      resolvedDefaultValues.width,
+      resolvedDefaultValues.height
     )
   );
 
   useEffect(() => {
+    reset(resolvedDefaultValues);
+  }, [reset, resolvedDefaultValues]);
+
+  useEffect(() => {
     setSelectedTemplateId(
       matchTemplateId(
-        defaultValues?.width ?? DEFAULT_PROJECT_VALUES.width,
-        defaultValues?.height ?? DEFAULT_PROJECT_VALUES.height
+        resolvedDefaultValues.width,
+        resolvedDefaultValues.height
       )
     );
-  }, [defaultValues?.width, defaultValues?.height]);
+  }, [resolvedDefaultValues.height, resolvedDefaultValues.width]);
 
   const fps = watch('fps');
   const fpsOptions = useMemo(() => getProjectFpsOptions(fps), [fps]);

@@ -67,8 +67,8 @@ Layer masks with keyframeable geometry transforms for compositing and selective 
 
 - In-browser rendering via WebCodecs (no server required)
 - **Video containers:** MP4, WebM, MOV, MKV
-- **Video codecs:** H.264, H.265, VP8, VP9, AV1
-- **Audio codecs:** AAC, Opus, MP3, FLAC, PCM (WAV)
+- **Video codecs:** H.264, H.265, VP8, VP9
+- **Audio export formats:** MP3, AAC, WAV
 - Quality presets: low (2 Mbps), medium (5 Mbps), high (10 Mbps), ultra (20 Mbps)
 
 ### Media
@@ -85,7 +85,7 @@ Layer masks with keyframeable geometry transforms for compositing and selective 
 ### Transcription
 
 - Browser-based speech-to-text via Whisper (runs locally in a Web Worker)
-- Models: tiny, base, small, medium, large
+- Models: Tiny, Base, Small, Large v3 Turbo
 - Auto-generate caption text items from transcripts
 - Multi-language support
 
@@ -97,7 +97,7 @@ Layer masks with keyframeable geometry transforms for compositing and selective 
 - IndexedDB persistence with content-addressable storage
 - Auto-save
 - Customizable keyboard shortcuts with preset import/export
-- Configurable settings (FPS, snap, waveforms, filmstrips, preview quality, export defaults, undo depth, auto-save interval)
+- Configurable settings (default FPS, snap, waveforms, filmstrips, preview quality, export defaults, undo depth, auto-save interval)
 
 ## Quick Start
 
@@ -123,7 +123,7 @@ Open [http://localhost:5173](http://localhost:5173) in Chrome.
 
 ## Browser Support
 
-Chrome 113+ required. FreeCut uses WebGPU, WebCodecs, OPFS, and the File System Access API which are not yet available in all browsers.
+Chrome or Edge 113+ recommended. FreeCut uses WebGPU, WebCodecs, OPFS, and the File System Access API, so a modern Chromium browser is required for the full workflow.
 
 ### Brave
 
@@ -204,7 +204,7 @@ npm run check:edge-budgets # Feature seam coupling budget check
 npm run report:feature-edges # Feature dependency edge report
 npm run report:feature-edges:json # JSON feature edge report
 npm run report:deps-wrapper-health:json # JSON deps wrapper health report
-npm run verify         # Boundaries + deps contracts + no-lib guard + wrapper health + edge budgets + lint + build
+npm run verify         # Boundaries + deps contracts + no-lib guard + wrapper health + edge budgets + lint + tests + build
 npm run preview:perf   # Serve the last production build on port 4173
 npm run perf           # Build + serve a local production-like perf target
 npm run test           # Vitest (watch mode)

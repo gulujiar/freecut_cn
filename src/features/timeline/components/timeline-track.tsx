@@ -920,7 +920,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
 
     const { supported, entries, errors } = await extractValidMediaFileEntriesFromDataTransfer(e.dataTransfer);
     if (!supported) {
-      toast.warning('Drag-drop not supported. Please use Google Chrome.');
+      toast.warning('Drag-drop not supported in this browser. Use Chrome or Edge.');
       return;
     }
 

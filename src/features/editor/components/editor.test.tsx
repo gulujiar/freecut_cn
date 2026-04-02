@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   setProject: vi.fn(),
   pausePlayback: vi.fn(),
   setPreviewFrame: vi.fn(),
+  setPreviewQuality: vi.fn(),
+  toggleSnap: vi.fn(),
   syncSidebarLayout: vi.fn(),
   clearPreviewAudioCache: vi.fn(),
   importExportDialog: vi.fn().mockResolvedValue({
@@ -121,6 +123,8 @@ vi.mock('@/features/editor/deps/timeline-store', () => {
       getState: () => ({
         loadTimeline: mocks.loadTimeline,
         saveTimeline: mocks.saveTimeline,
+        snapEnabled: true,
+        toggleSnap: mocks.toggleSnap,
       }),
     }
   );
@@ -144,8 +148,18 @@ vi.mock('@/features/editor/deps/media-library', () => {
 });
 
 vi.mock('@/features/editor/deps/settings', () => ({
-  useSettingsStore: (selector: (state: { editorDensity: string }) => unknown) =>
-    selector({ editorDensity: 'comfortable' }),
+  useSettingsStore: (
+    selector: (state: {
+      editorDensity: string;
+      previewQuality: 'low' | 'medium' | 'high';
+      snapEnabled: boolean;
+    }) => unknown
+  ) =>
+    selector({
+      editorDensity: 'comfortable',
+      previewQuality: 'high',
+      snapEnabled: true,
+    }),
 }));
 
 vi.mock('@/features/editor/deps/preview', () => ({
@@ -158,6 +172,7 @@ vi.mock('@/shared/state/playback', () => {
     getState: () => ({
       pause: mocks.pausePlayback,
       setPreviewFrame: mocks.setPreviewFrame,
+      setPreviewQuality: mocks.setPreviewQuality,
     }),
   });
 

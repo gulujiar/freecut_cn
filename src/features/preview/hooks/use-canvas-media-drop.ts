@@ -348,7 +348,7 @@ export function useCanvasMediaDrop({
       event.dataTransfer
     );
     if (!supported) {
-      toast.warning('Drag-drop not supported. Please use Google Chrome.');
+      toast.warning('Drag-drop not supported in this browser. Use Chrome or Edge.');
       return;
     }
 
