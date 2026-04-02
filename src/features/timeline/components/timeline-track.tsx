@@ -23,6 +23,7 @@ import {
   type CompositionDragData,
 } from '@/features/timeline/deps/media-library-resolver';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
+import { resolveEffectiveTrackStates } from '../utils/group-utils';
 import { mapWithConcurrency } from '@/shared/async/async-utils';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import {
@@ -157,6 +158,19 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const externalPreviewPromiseRef = useRef<Promise<void> | null>(null);
   const externalPreviewTokenRef = useRef(0);
   const lastDragFrameRef = useRef(0);
+
+  // Resolve whether this track is effectively disabled for drops.
+  // Uses the shared resolveEffectiveTrackStates helper so group-inherited
+  // locked/visible/muted flags are consistent with the rest of the codebase.
+  const isDropDisabled = useTimelineStore((s) => {
+    const effective = resolveEffectiveTrackStates(s.tracks).find((t) => t.id === track.id);
+    if (!effective) return track.locked;
+    if (effective.locked) return true;
+    const kind = effective.kind;
+    if (kind === 'audio') return effective.muted;
+    if (kind === 'video') return effective.visible === false;
+    return effective.visible === false || effective.muted;
+  });
 
   // Virtualized items/transitions â€” only those overlapping the visible viewport + buffer
   const { visibleItems: trackItems, visibleTransitions: trackTransitions } = useVisibleItems(track.id);
@@ -556,7 +570,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (track.locked) {
+    if (isDropDisabled) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'none';
       return;
@@ -734,7 +748,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     clearTrackGhostPreviews();
     clearExternalPreviewSession();
 
-    if (track.locked) {
+    if (isDropDisabled) {
       return;
     }
 
@@ -981,16 +995,16 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           onMouseDown={handleMouseDown}
           onContextMenu={handleContextMenu}
         >
-          {isDragOver && !track.locked && !isExternalDragOver && ghostPreviews.length === 0 && (
+          {isDragOver && !isDropDisabled && !isExternalDragOver && ghostPreviews.length === 0 && (
             <div className="absolute inset-0 pointer-events-none z-10 rounded border border-dashed border-primary/50 bg-primary/10" />
           )}
 
-          {!track.locked && ghostPreviews.length > 0 && (
+          {!isDropDisabled && ghostPreviews.length > 0 && (
             <div className={`absolute inset-0 pointer-events-none z-10 rounded border border-dashed ${ghostHighlightClasses}`} />
           )}
 
           {/* Ghost preview clips during drag */}
-          {!track.locked && ghostPreviews.map((ghost, index) => (
+          {!isDropDisabled && ghostPreviews.map((ghost, index) => (
             <div
               key={index}
               className={`absolute inset-y-0 rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 ${
