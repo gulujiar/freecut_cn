@@ -23,13 +23,14 @@ import {
 } from '@/components/ui/alert-dialog';
 import { cn } from '@/shared/ui/cn';
 import {
+  deleteCompoundClips,
+  getCompoundClipDeletionImpact,
+  renameCompoundClip,
   useCompositionsStore,
   useCompositionNavigationStore,
-  useItemsStore,
   type SubComposition,
   wouldCreateCompositionCycle,
 } from '@/features/media-library/deps/timeline-stores';
-import { removeItemsFromItemsActions as removeItems } from '@/features/media-library/deps/timeline-actions';
 import { useMediaLibraryStore } from '../stores/media-library-store';
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 import { GRID_COLS_BY_SIZE } from './media-grid-constants';
@@ -42,8 +43,6 @@ import { CARD_GRID_BASE, CARD_LIST_BASE, CARD_PERF_STYLE } from './card-styles';
  */
 export function CompositionsSection() {
   const compositions = useCompositionsStore((s) => s.compositions);
-  const removeComposition = useCompositionsStore((s) => s.removeComposition);
-  const updateComposition = useCompositionsStore((s) => s.updateComposition);
   const compositionById = useCompositionsStore((s) => s.compositionById);
   const enterComposition = useCompositionNavigationStore((s) => s.enterComposition);
   const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId);
@@ -106,14 +105,7 @@ export function CompositionsSection() {
 
   const handleConfirmDelete = () => {
     if (!deleteTarget) return;
-    const items = useItemsStore.getState().items;
-    const refsOnTimeline = items.filter(
-      (i) => i.type === 'composition' && i.compositionId === deleteTarget.id
-    );
-    if (refsOnTimeline.length > 0) {
-      removeItems(refsOnTimeline.map((i) => i.id));
-    }
-    removeComposition(deleteTarget.id);
+    deleteCompoundClips([deleteTarget.id]);
     setSelection({
       mediaIds: selectedMediaIds,
       compositionIds: selectedCompositionIds.filter((id) => id !== deleteTarget.id),
@@ -134,16 +126,14 @@ export function CompositionsSection() {
     }
     const trimmed = editValue.trim();
     if (trimmed && trimmed !== useCompositionsStore.getState().getComposition(id)?.name) {
-      updateComposition(id, { name: trimmed });
+      renameCompoundClip(id, trimmed);
     }
     setEditingId(null);
   };
 
-  const refsOnTimeline = deleteTarget
-    ? useItemsStore.getState().items.filter(
-        (i) => i.type === 'composition' && i.compositionId === deleteTarget.id
-      )
-    : [];
+  const deleteImpact = deleteTarget
+    ? getCompoundClipDeletionImpact([deleteTarget.id])
+    : { rootReferenceCount: 0, nestedReferenceCount: 0, totalReferenceCount: 0 };
 
   if (compositions.length === 0) return null;
 
@@ -207,13 +197,13 @@ export function CompositionsSection() {
                   Are you sure you want to delete &ldquo;{deleteTarget?.name}&rdquo;?
                   This action cannot be undone.
                 </p>
-                {refsOnTimeline.length > 0 && (
+                {deleteImpact.totalReferenceCount > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
                     <Trash2 className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                      <p className="font-medium">Timeline references will be removed</p>
+                      <p className="font-medium">All remaining instances will be removed</p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        {refsOnTimeline.length} compound clip item{refsOnTimeline.length > 1 ? 's' : ''} on the timeline will also be deleted.
+                        {deleteImpact.totalReferenceCount} compound clip instance{deleteImpact.totalReferenceCount > 1 ? 's' : ''} across the timeline and nested compound clips will also be deleted.
                       </p>
                     </div>
                   </div>

@@ -14,7 +14,13 @@ export {
 export { useItemsStore } from '../stores/items-store';
 export { wouldCreateCompositionCycle } from '../utils/composition-graph';
 
-export { removeItems, updateItem } from '../stores/timeline-actions';
+export {
+  deleteCompoundClips,
+  getCompoundClipDeletionImpact,
+  removeItems,
+  renameCompoundClip,
+  updateItem,
+} from '../stores/timeline-actions';
 export {
   removeItems as removeItemsFromItemsActions,
 } from '../stores/actions/item-actions';

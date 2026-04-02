@@ -60,6 +60,7 @@ export const ClipContent = memo(function ClipContent({
   const composition = useCompositionsStore(
     useCallback((s) => (compositionId ? s.compositionById[compositionId] ?? null : null), [compositionId])
   );
+  const compositionById = useCompositionsStore((s) => s.compositionById);
   const hasCompositionAudioCompanion = useItemsStore(
     useCallback(
       (s) => item.type === 'composition' && hasLinkedAudioCompanion(s.items, item),
@@ -73,6 +74,7 @@ export const ClipContent = memo(function ClipContent({
         audioMediaId: null,
         hasOwnedAudio: false,
         hasMultipleOwnedAudioSources: false,
+        visualSource: null,
       };
     }
 
@@ -80,9 +82,11 @@ export const ClipContent = memo(function ClipContent({
       items: composition.items,
       tracks: composition.tracks,
       fps: composition.fps,
+      compositionById,
       });
-  }, [composition]);
-  const compositionVisualMediaId = compositionSummary.visualMediaId;
+  }, [composition, compositionById]);
+  const compositionVisualSource = compositionSummary.visualSource;
+  const compositionVisualMediaId = compositionVisualSource?.mediaId ?? null;
   const showCompositionWaveform = showWaveforms && compositionSummary.hasOwnedAudio && !hasCompositionAudioCompanion;
   const linkedSyncOffsetLabel = linkedSyncOffsetFrames === null
     ? null
@@ -174,10 +178,11 @@ export const ClipContent = memo(function ClipContent({
   );
   const compositionVisualSourceDuration = compositionVisualMediaDuration > 0
     ? compositionVisualMediaDuration
-    : (compositionSourceDurationFrames / compositionVisualSourceFps);
+    : ((compositionVisualSource?.sourceDuration ?? compositionSourceDurationFrames) / compositionVisualSourceFps);
   const compositionVisualSourceStart = compositionVisualMediaDuration > 0
-    ? (compositionSourceStartFrames / compositionSourceDurationFrames) * compositionVisualMediaDuration
-    : (compositionSourceStartFrames / compositionVisualSourceFps);
+    ? ((compositionVisualSource?.sourceStart ?? compositionSourceStartFrames) / Math.max(1, compositionVisualSource?.sourceDuration ?? compositionSourceDurationFrames)) * compositionVisualMediaDuration
+    : ((compositionVisualSource?.sourceStart ?? compositionSourceStartFrames) / compositionVisualSourceFps);
+  const compositionVisualSpeed = compositionVisualSource?.speed ?? 1;
   const compoundClipTimelineFps = composition?.fps ?? fps;
   const compoundClipSourceDuration = compositionSourceDurationFrames / compoundClipTimelineFps;
   const compoundClipSourceStart = compositionSourceStartFrames / compoundClipTimelineFps;
@@ -319,7 +324,7 @@ export const ClipContent = memo(function ClipContent({
                 sourceStart={compositionVisualSourceStart}
                 sourceDuration={compositionVisualSourceDuration}
                 trimStart={0}
-                speed={1}
+                speed={compositionVisualSpeed}
                 fps={fps}
                 isVisible={isClipVisible}
                 visibleStartRatio={visibleStartRatio}

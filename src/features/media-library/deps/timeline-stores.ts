@@ -1,4 +1,7 @@
 export {
+  deleteCompoundClips,
+  getCompoundClipDeletionImpact,
+  renameCompoundClip,
   useTimelineSettingsStore,
   useTimelineStore,
   useCompositionNavigationStore,
