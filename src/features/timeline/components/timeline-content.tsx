@@ -378,6 +378,24 @@ export const TimelineContent = memo(function TimelineContent({
     }
   });
 
+  // Scroll the timeline so a specific frame is visible (requested externally)
+  const pendingScrollToFrame = useTimelineViewportStore((s) => s.pendingScrollToFrame);
+  useEffect(() => {
+    if (pendingScrollToFrame === null) return;
+    const container = containerRef.current;
+    if (!container) return;
+    useTimelineViewportStore.getState().clearScrollToFrame();
+
+    const frameX = frameToPixelsRef.current(pendingScrollToFrame);
+    const { scrollLeft: sl, viewportWidth: vw } = useTimelineViewportStore.getState();
+    // Already visible — nothing to do
+    if (frameX >= sl && frameX <= sl + vw) return;
+
+    // Center the frame in the viewport
+    container.scrollLeft = Math.max(0, frameX - vw / 2);
+    syncViewportFromContainer();
+  }, [pendingScrollToFrame, syncViewportFromContainer]);
+
   // Marquee selection - create items array for getBoundingRect lookups
   // Use derived selector for item IDs only (doesn't re-render when positions change)
   // useShallow prevents infinite loops from array reference changes

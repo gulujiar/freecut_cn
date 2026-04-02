@@ -105,6 +105,43 @@ describe('findBestCanvasDropPlacement', () => {
     });
   });
 
+  it('skips muted tracks', () => {
+    const placement = findBestCanvasDropPlacement({
+      tracks: [
+        makeTrack('track-1', 0, { muted: true }),
+        makeTrack('track-2', 1),
+      ],
+      items: [],
+      activeTrackId: 'track-1',
+      proposedFrame: 0,
+      durationInFrames: 30,
+      itemType: 'video',
+    });
+
+    expect(placement).toEqual({
+      trackId: 'track-2',
+      from: 0,
+      preservedTime: true,
+    });
+  });
+
+  it('returns null when all tracks are disabled', () => {
+    const placement = findBestCanvasDropPlacement({
+      tracks: [
+        makeTrack('track-1', 0, { locked: true }),
+        makeTrack('track-2', 1, { muted: true }),
+        makeTrack('track-3', 2, { visible: false }),
+      ],
+      items: [],
+      activeTrackId: 'track-1',
+      proposedFrame: 0,
+      durationInFrames: 30,
+      itemType: 'video',
+    });
+
+    expect(placement).toBeNull();
+  });
+
   it('keeps visual placements off audio tracks', () => {
     const placement = findBestCanvasDropPlacement({
       tracks: [

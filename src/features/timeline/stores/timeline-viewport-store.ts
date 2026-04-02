@@ -9,6 +9,9 @@ interface TimelineViewportState {
 
 interface TimelineViewportActions {
   setViewport: (next: TimelineViewportState) => void;
+  /** Request the timeline container to scroll so `frame` is visible. */
+  requestScrollToFrame: (frame: number) => void;
+  clearScrollToFrame: () => void;
 }
 
 const EPSILON = 0.5;
@@ -53,6 +56,9 @@ export const useTimelineViewportStore = create<TimelineViewportState & TimelineV
     scrollTop: 0,
     viewportWidth: 0,
     viewportHeight: 0,
+    pendingScrollToFrame: null as number | null,
+    requestScrollToFrame: (frame: number) => set({ pendingScrollToFrame: frame }),
+    clearScrollToFrame: () => set({ pendingScrollToFrame: null }),
     setViewport: (next) => {
       const current = get();
       if (!hasMeaningfulChange(current, next)) {

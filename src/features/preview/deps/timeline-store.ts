@@ -10,5 +10,6 @@ export {
   useKeyframesStore,
   useTransitionsStore,
   useTimelineSettingsStore,
+  useTimelineViewportStore,
   useMediaDependencyStore,
 } from './timeline-contract';

@@ -19,6 +19,7 @@ import {
   useItemsStore,
   useKeyframesStore,
   useTimelineStore,
+  useTimelineViewportStore,
   useTransitionsStore,
 } from '@/features/preview/deps/timeline-store';
 import {
@@ -1297,7 +1298,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
     const placementTrackId = placement.trackId;
     const eligibleTracks = resolveEffectiveTrackStates(tracks).filter(
-      (track) => track.visible !== false && !track.locked && !track.isGroup
+      (track) => track.visible !== false && !track.locked && !track.muted && !track.isGroup
     );
     const activeTrack = activeTrackId
       ? eligibleTracks.find((track) => track.id === activeTrackId)
@@ -1337,6 +1338,17 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       };
     }
 
+    // Guard: reject if placement would overlap existing segments on the target track
+    const wouldOverlap = items.some(item =>
+      item.trackId === placement.trackId
+      && item.from < placement.from + durationInFrames
+      && placement.from < item.from + item.durationInFrames
+    );
+    if (wouldOverlap) {
+      cancelPenMode();
+      return;
+    }
+
     const shapeItem: ShapeItem = {
       id: crypto.randomUUID(),
       type: 'shape',
@@ -1363,6 +1375,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     addItem(shapeItem);
     setActiveTrack(shapeItem.trackId);
     selectItems([shapeItem.id]);
+    useTimelineViewportStore.getState().requestScrollToFrame(shapeItem.from);
     stopEditing();
   }, [coordParams, cancelPenMode, stopEditing]);
 
