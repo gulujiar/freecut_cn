@@ -247,8 +247,12 @@ export const SliderInput = memo(function SliderInput({
   }, [localValue, updateDisplayedValue]);
 
   useEffect(() => {
-    fillPercentRef.current = fillPercent;
-    updateFillVisual(fillPercent, { active: isInteracting || isHovered, dragging: isDragging });
+    if (isInteracting) {
+      updateFillVisual(fillPercentRef.current, { active: true, dragging: isDragging });
+    } else {
+      fillPercentRef.current = fillPercent;
+      updateFillVisual(fillPercent, { active: isHovered, dragging: false });
+    }
   }, [fillPercent, isDragging, isHovered, isInteracting, updateFillVisual]);
 
   useEffect(() => {
@@ -564,7 +568,7 @@ export const SliderInput = memo(function SliderInput({
             'transition-colors duration-150'
           )}
           style={{
-            width: `${Math.max(0, Math.min(100, fillPercent))}%`,
+            width: `${Math.max(0, Math.min(100, fillPercentRef.current))}%`,
             background: isActive
               ? 'hsl(var(--foreground) / 0.12)'
               : 'hsl(var(--foreground) / 0.08)',
@@ -576,7 +580,7 @@ export const SliderInput = memo(function SliderInput({
           ref={handleRef}
           className="absolute top-1/2 w-[3px] h-3.5 rounded-full bg-foreground/90 pointer-events-none"
           style={{
-            left: `max(4px, calc(${Math.max(0, Math.min(100, fillPercent))}% - 1.5px))`,
+            left: `max(4px, calc(${Math.max(0, Math.min(100, fillPercentRef.current))}% - 1.5px))`,
             transform: `translateY(-50%) scaleX(${isActive ? 1 : 0.25}) scaleY(${isActive && valueDodge ? 0.75 : 1})`,
             opacity: handleOpacity,
             transition: 'opacity 150ms, transform 200ms cubic-bezier(0.23, 1, 0.32, 1)',

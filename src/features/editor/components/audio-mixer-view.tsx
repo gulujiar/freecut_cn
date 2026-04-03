@@ -779,6 +779,7 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, m
                 isDraggingRef.current = false;
                 dragOffsetPercentRef.current = 0;
                 applyBusDragValue(volumeDb);
+                clearLiveBusVolumeOverride();
               }}
               onDoubleClick={handleDoubleClick}
             >

@@ -117,10 +117,6 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   });
 
   const effectiveFrame = previewFrame ?? displayedFrame ?? currentFrame;
-  const liveBusOverrideDb = getLiveBusVolumeOverride();
-  const playbackGain = isPlaying && !muted
-    ? (liveBusOverrideDb !== null ? Math.pow(10, liveBusOverrideDb / 20) : volume)
-    : 0;
   const combinedTracks = useMemo(() => {
     return tracks
       .filter((track) => !track.isGroup)
@@ -167,6 +163,13 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   // Re-resolve sources when live fader overrides change (fader drag in progress).
   const liveOverrideVersion = useSyncExternalStore(subscribeLiveOverrideVersion, getLiveOverrideVersion, getLiveOverrideVersion);
+
+  // Read bus override inside the same version-gated render cycle so playbackGain
+  // recomputes whenever the bus fader moves (subscription above guarantees re-render).
+  const liveBusOverrideDb = getLiveBusVolumeOverride();
+  const playbackGain = isPlaying && !muted
+    ? (liveBusOverrideDb !== null ? Math.pow(10, liveBusOverrideDb / 20) : volume)
+    : 0;
 
   const preloadSources = useMemo(() => {
     return resolveCompiledAudioMeterSources({
