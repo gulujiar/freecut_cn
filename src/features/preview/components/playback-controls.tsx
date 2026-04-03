@@ -13,6 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { useMediaLibraryStore, mediaLibraryService } from '@/features/preview/deps/media-library-contract';
 import { formatTimecode } from '@/utils/time-utils';
 import { toast } from 'sonner';
@@ -85,6 +86,8 @@ function buildFrameFileName(frame: number, fps: number, totalFrames: number): st
  * - Frame capture
  * - Volume control
  */
+const btnSize = { width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize } as const;
+
 export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
   const [isSavingFrame, setIsSavingFrame] = useState(false);
 
@@ -204,7 +207,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6 flex-shrink-0"
+          className="flex-shrink-0"
+          style={btnSize}
           onClick={handleGoToStart}
           data-tooltip="Go to Start (Home)"
           aria-label="Go to start"
@@ -215,7 +219,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6 flex-shrink-0"
+          className="flex-shrink-0"
+          style={btnSize}
           onClick={handlePreviousFrame}
           data-tooltip="Previous Frame (Left Arrow)"
           aria-label="Previous frame"
@@ -225,7 +230,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
 
         <Button
           size="icon"
-          className="h-6 w-6 flex-shrink-0"
+          className="flex-shrink-0"
+          style={btnSize}
           onClick={togglePlayPause}
           data-tooltip={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
           aria-label={isPlaying ? 'Pause' : 'Play'}
@@ -240,7 +246,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6 flex-shrink-0"
+          className="flex-shrink-0"
+          style={btnSize}
           onClick={handleNextFrame}
           data-tooltip="Next Frame (Right Arrow)"
           aria-label="Next frame"
@@ -251,7 +258,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6 flex-shrink-0"
+          className="flex-shrink-0"
+          style={btnSize}
           onClick={handleGoToEnd}
           data-tooltip="Go to End (End)"
           aria-label="Go to end"
@@ -267,7 +275,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6 flex-shrink-0"
+          className="flex-shrink-0"
+          style={btnSize}
           onClick={() => {
             void handleSaveFrame();
           }}
@@ -290,7 +299,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
         <Button
           variant="ghost"
           size="icon"
-          className={`h-6 w-6 flex-shrink-0 ${
+          style={btnSize}
+          className={`flex-shrink-0 ${
             useProxy
               ? 'text-green-500 hover:text-green-400 hover:bg-green-500/10'
               : 'text-muted-foreground hover:text-foreground'

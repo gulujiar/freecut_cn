@@ -857,7 +857,7 @@ function SourcePlaybackControls({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-5 w-5"
+                  style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }}
                   disabled={inPoint === null && outPoint === null}
                   onClick={handleReplaySegment}
                 >
@@ -868,7 +868,7 @@ function SourcePlaybackControls({
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={handleMarkIn}>
+                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleMarkIn}>
                   <ArrowLeftToLine className="w-3 h-3" />
                 </Button>
               </TooltipTrigger>
@@ -876,7 +876,7 @@ function SourcePlaybackControls({
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={handleMarkOut}>
+                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleMarkOut}>
                   <ArrowRightToLine className="w-3 h-3" />
                 </Button>
               </TooltipTrigger>
@@ -884,7 +884,7 @@ function SourcePlaybackControls({
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-5 w-5" onClick={handleClearIO}>
+                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleClearIO}>
                   <XCircle className="w-3 h-3" />
                 </Button>
               </TooltipTrigger>
@@ -917,7 +917,7 @@ function SourcePlaybackControls({
         <div className="flex items-center gap-0.5 shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => player.seek(0)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.seek(0)}>
                 <SkipBack className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -925,7 +925,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => player.frameBack(1)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.frameBack(1)}>
                 <ChevronLeft className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -933,7 +933,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon" className="h-6 w-6" onClick={() => player.toggle()}>
+              <Button size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.toggle()}>
                 {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
               </Button>
             </TooltipTrigger>
@@ -941,7 +941,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => player.frameForward(1)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.frameForward(1)}>
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -949,7 +949,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => player.seek(lastFrame)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.seek(lastFrame)}>
                 <SkipForward className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -1019,7 +1019,7 @@ function SourcePlaybackControls({
             <div className="w-px h-4 bg-border mx-0.5" />
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => performInsertEdit()}>
+                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => performInsertEdit()}>
                   <ArrowDownToLine className="w-3.5 h-3.5" />
                 </Button>
               </TooltipTrigger>
@@ -1027,7 +1027,7 @@ function SourcePlaybackControls({
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => performOverwriteEdit()}>
+                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => performOverwriteEdit()}>
                   <Replace className="w-3.5 h-3.5" />
                 </Button>
               </TooltipTrigger>

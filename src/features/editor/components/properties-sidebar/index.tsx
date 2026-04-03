@@ -179,7 +179,8 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-5 w-5 shrink-0"
+                  className="shrink-0"
+                  style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
                   onClick={togglePropertiesFullColumn}
                   data-tooltip={propertiesFullColumn ? 'Dock to preview' : 'Expand full column'}
                   data-tooltip-side="bottom"
@@ -206,7 +207,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
                 onClick={toggleRightSidebar}
               >
                 <ChevronRight className="w-3.5 h-3.5" />

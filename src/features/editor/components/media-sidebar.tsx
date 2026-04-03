@@ -380,7 +380,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
         >
           <button
             onClick={toggleLeftSidebar}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+            className="rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+            style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
             data-tooltip={leftSidebarOpen ? 'Collapse Panel' : 'Expand Panel'}
             data-tooltip-side="right"
           >
@@ -468,7 +469,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5 shrink-0"
+              className="shrink-0"
+              style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
               onClick={toggleMediaFullColumn}
               data-tooltip={mediaFullColumn ? 'Dock to preview' : 'Expand full column'}
               data-tooltip-side="bottom"
