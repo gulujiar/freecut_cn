@@ -411,6 +411,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
       <Item
         item={videoItem}
         muted={videoItem.muted}
+        visible={videoItem.trackVisible}
         masks={getMasksForTrackOrder(activeMaskInfos, videoItem.trackOrder)}
         renderDepth={renderDepth}
         audioGainMultiplier={effectiveAudioGainMultiplier}
