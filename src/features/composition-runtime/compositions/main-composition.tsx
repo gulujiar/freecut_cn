@@ -94,11 +94,12 @@ type EnrichedAudioItem = AudioTrackItem;
 const MaskedItem: React.FC<{
   item: TimelineItem;
   muted: boolean;
+  visible?: boolean;
   itemTrackOrder: number;
   compositionRenderMode?: 'full' | 'visual-only' | 'audio-only';
-}> = ({ item, muted, itemTrackOrder, compositionRenderMode = 'full' }) => {
+}> = ({ item, muted, visible = true, itemTrackOrder, compositionRenderMode = 'full' }) => {
   const masks = React.useContext(ActiveMasksContext);
-  return <Item item={item} muted={muted} masks={getMasksForTrackOrder(masks, itemTrackOrder)} compositionRenderMode={compositionRenderMode} />;
+  return <Item item={item} muted={muted} visible={visible} masks={getMasksForTrackOrder(masks, itemTrackOrder)} compositionRenderMode={compositionRenderMode} />;
 };
 
 
@@ -574,6 +575,7 @@ export const MainComposition: React.FC<CompositionInputProps> = ({
                             <MaskedItem
                               item={item}
                               muted={track.muted || !track.trackVisible || (item.type === 'composition' && hasLinkedAudioCompanion(audioItems, item))}
+                              visible={track.trackVisible}
                               itemTrackOrder={trackOrder}
                               compositionRenderMode={item.type === 'composition' && hasLinkedAudioCompanion(audioItems, item) ? 'visual-only' : 'full'}
                             />

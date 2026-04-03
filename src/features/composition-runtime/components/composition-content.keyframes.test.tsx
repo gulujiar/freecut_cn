@@ -472,4 +472,79 @@ describe('CompositionContent keyframes', () => {
     expect(screen.queryByTestId('sub-item-sub-video-audio-only')).toBeNull();
     expect(screen.getByTestId('sub-item-sub-audio-audio-only')).toBeInTheDocument();
   });
+
+  it('keeps nested compound visuals hidden when the parent wrapper is hidden', () => {
+    const subTracks: TimelineTrack[] = [
+      {
+        id: 'sub-track-video-hidden',
+        name: 'V1',
+        kind: 'video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ];
+
+    const subComp: TestSubComposition = {
+      id: 'sub-comp-hidden-parent',
+      name: 'Hidden parent precomp',
+      items: [
+        {
+          id: 'sub-video-hidden-parent',
+          type: 'video',
+          trackId: 'sub-track-video-hidden',
+          from: 0,
+          durationInFrames: 60,
+          label: 'Nested video',
+          src: 'blob:video',
+          mediaId: 'media-1',
+        },
+      ],
+      tracks: subTracks,
+      transitions: [],
+      keyframes: [],
+      fps: 30,
+      width: 1280,
+      height: 720,
+      durationInFrames: 60,
+    };
+
+    useCompositionsStore.setState({
+      compositions: [subComp],
+      compositionById: { [subComp.id]: subComp },
+      mediaDependencyIds: [],
+      mediaDependencyVersion: 0,
+    });
+
+    const compositionItem: CompositionItem = {
+      id: 'parent-comp-item-hidden',
+      type: 'composition',
+      compositionId: subComp.id,
+      trackId: 'parent-track',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Nested comp',
+      compositionWidth: 1280,
+      compositionHeight: 720,
+    };
+
+    const { container } = render(
+      <VideoConfigProvider fps={30} width={1280} height={720} durationInFrames={120}>
+        <CompositionContent item={compositionItem} parentVisible={false} />
+      </VideoConfigProvider>
+    );
+
+    expect(screen.getByTestId('sub-item-sub-video-hidden-parent')).toBeInTheDocument();
+
+    const visibilityStyles = Array.from(container.querySelectorAll('div[style]'))
+      .map((element) => element.getAttribute('style') ?? '')
+      .filter((style) => style.includes('visibility:'));
+
+    expect(visibilityStyles.length).toBeGreaterThan(0);
+    expect(visibilityStyles.every((style) => style.includes('visibility: hidden'))).toBe(true);
+  });
 });
