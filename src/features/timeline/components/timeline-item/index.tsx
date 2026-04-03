@@ -3083,7 +3083,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
           {isVisualFadeItem && (
             <div
-              className="absolute inset-x-0 bottom-0 z-30"
+              className="absolute inset-x-0 bottom-0 z-30 pointer-events-none"
               style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
             >
               <VideoFadeHandles
@@ -3106,7 +3106,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           {/* Trim handles */}
           {item.type === 'audio' && (
             <div
-              className="absolute inset-x-0 bottom-0 z-30"
+              className="absolute inset-x-0 bottom-0 z-30 pointer-events-none"
               style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
             >
               <AudioFadeHandles
