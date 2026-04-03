@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Video, FileAudio, Image as ImageIcon, MoreVertical, Trash2, Loader2, Link2Off, RefreshCw, Zap, FileText } from 'lucide-react';
+import { Video, FileAudio, Image as ImageIcon, MoreVertical, Trash2, Loader2, Link2Off, RefreshCw, Zap, FileText, Play, Square } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -58,11 +58,15 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
   const hasProxy = proxyStatus === 'ready';
   const hasTranscript = transcriptStatus === 'ready';
   const isTranscribing = transcriptStatus === 'transcribing';
+  const [audioPlaying, setAudioPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const thumbnailRef = useRef<HTMLImageElement>(null);
   const thumbnailContainerRef = useRef<HTMLDivElement | null>(null);
   const dragImageRef = useRef<HTMLDivElement | null>(null);
   const setMediaSkimPreview = useEditorStore((s) => s.setMediaSkimPreview);
   const clearMediaSkimPreview = useEditorStore((s) => s.clearMediaSkimPreview);
+
+  const isAudio = mediaType === 'audio' && !isBroken && !isImporting;
 
   // Load thumbnail on mount and when thumbnailId changes (e.g. after regeneration)
   useEffect(() => {
@@ -287,6 +291,45 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
     };
   }, [canHoverPreview, clearMediaSkimPreview, media.id]);
 
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        URL.revokeObjectURL(audioRef.current.src);
+        audioRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleAudioToggle = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    if (audioPlaying && audioRef.current) {
+      audioRef.current.pause();
+      setAudioPlaying(false);
+      return;
+    }
+
+    if (audioRef.current) {
+      audioRef.current.play();
+      setAudioPlaying(true);
+      return;
+    }
+
+    const blobUrl = await mediaLibraryService.getMediaBlobUrl(media.id);
+    if (!blobUrl) return;
+
+    const audio = new Audio(blobUrl);
+    audio.addEventListener('ended', () => {
+      setAudioPlaying(false);
+    });
+    audioRef.current = audio;
+    audio.play();
+    setAudioPlaying(true);
+  }, [audioPlaying, media.id]);
+
   const transcriptProgressLabel = transcriptProgress
     ? `${getTranscriptionStageLabel(transcriptProgress.stage)} (${Math.round(getTranscriptionOverallPercent(transcriptProgress))}%)`
     : 'Transcribing...';
@@ -370,6 +413,25 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
                 className="absolute inset-y-0 w-px bg-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.25)] pointer-events-none"
                 style={{ left: `${skimProgress * 100}%` }}
               />
+          )}
+          {/* Audio play button for list view */}
+          {isAudio && (
+            <button
+              type="button"
+              onClick={handleAudioToggle}
+              className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors"
+            >
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                audioPlaying
+                  ? 'bg-white/90 text-black'
+                  : 'bg-black/50 text-white'
+              }`}>
+                {audioPlaying
+                  ? <Square className="w-2.5 h-2.5 fill-current" />
+                  : <Play className="w-3 h-3 fill-current ml-0.5" />
+                }
+              </div>
+            </button>
           )}
         </div>
 
@@ -537,6 +599,26 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
           <div className="absolute top-1 right-1 p-0.5 rounded bg-green-500/90 text-black pointer-events-none">
             <Zap className="w-2.5 h-2.5" />
           </div>
+        )}
+
+        {/* Audio play button */}
+        {isAudio && (
+          <button
+            type="button"
+            onClick={handleAudioToggle}
+            className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors group/play"
+          >
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+              audioPlaying
+                ? 'bg-white/90 text-black'
+                : 'bg-black/50 text-white group-hover/play:bg-white/90 group-hover/play:text-black'
+            }`}>
+              {audioPlaying
+                ? <Square className="w-4 h-4 fill-current" />
+                : <Play className="w-5 h-5 fill-current ml-0.5" />
+              }
+            </div>
+          </button>
         )}
 
         {/* Overlaid badges - hidden during upload */}
