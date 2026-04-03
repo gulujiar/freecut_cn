@@ -44,6 +44,7 @@ interface CompositionWindow {
 interface CompositionContentProps {
   item: CompositionWrapperItem;
   parentMuted?: boolean;
+  parentVisible?: boolean;
   renderDepth?: number;
   renderMode?: 'full' | 'visual-only' | 'audio-only';
   audioGainMultiplier?: number;
@@ -132,7 +133,7 @@ function mapSubCompItemToWrapperWindow(params: {
  * then CSS-scaled to fit the parent container dimensions. This ensures sub-items
  * use the correct coordinate space (sub-comp dimensions, not main canvas).
  */
-export const CompositionContent = React.memo<CompositionContentProps>(({ item, parentMuted = false, renderDepth = 0, renderMode = 'full', audioGainMultiplier = 1, audioGainLiveItemIds, crossfadeFadeInFrames, crossfadeFadeOutFrames }) => {
+export const CompositionContent = React.memo<CompositionContentProps>(({ item, parentMuted = false, parentVisible = true, renderDepth = 0, renderMode = 'full', audioGainMultiplier = 1, audioGainLiveItemIds, crossfadeFadeInFrames, crossfadeFadeOutFrames }) => {
   const subComp = useCompositionsStore((s) => s.compositions.find((c) => c.id === item.compositionId));
   const { width: renderWidth, height: renderHeight, fps: mainFps } = useVideoConfig();
   const compositionSpace = useCompositionSpace();
@@ -296,10 +297,10 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
           zIndex: (maxTrackOrder - trackOrder) * 1000,
           muted: parentMuted || track.muted || linkedVideoIdsWithOwnedAudio.has(subItem.id),
           trackOrder,
-          trackVisible: track.visible,
+          trackVisible: parentVisible,
         }));
     });
-  }, [linkedVideoIdsWithOwnedAudio, maxTrackOrder, parentMuted, renderMode, resolvedItems, sortedTracks]);
+  }, [linkedVideoIdsWithOwnedAudio, maxTrackOrder, parentMuted, parentVisible, renderMode, resolvedItems, sortedTracks]);
   const nonVideoTrackItems = useMemo(() => (
     sortedTracks
       .map((track) => {
@@ -308,7 +309,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
         return {
           trackId: track.id,
           trackOrder,
-          trackVisible: track.visible,
+          trackVisible: parentVisible,
           muted: parentMuted || track.muted,
           items: resolvedItems.filter((subItem) => (
             subItem.trackId === track.id
@@ -321,7 +322,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
         };
       })
       .filter((track) => track.items.length > 0)
-  ), [parentMuted, renderMode, resolvedItems, sortedTracks]);
+  ), [parentMuted, parentVisible, renderMode, resolvedItems, sortedTracks]);
 
   let wrapperFadeMultiplier = 1;
   const hasCrossfadeIn = (crossfadeFadeInFrames ?? 0) > 0;
@@ -410,6 +411,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
       <Item
         item={videoItem}
         muted={videoItem.muted}
+        visible={videoItem.trackVisible}
         masks={getMasksForTrackOrder(activeMaskInfos, videoItem.trackOrder)}
         renderDepth={renderDepth}
         audioGainMultiplier={effectiveAudioGainMultiplier}
@@ -431,6 +433,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
       transformOrigin: '0 0',
       overflow: 'hidden',
       position: 'relative',
+      visibility: parentVisible ? 'visible' : 'hidden',
     }}>
       <CompositionSpaceProvider
         projectWidth={subComp.width}
@@ -469,6 +472,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
                       <Item
                         item={subItem}
                         muted={track.muted || linkedVideoIdsWithOwnedAudio.has(subItem.id)}
+                        visible={track.trackVisible}
                         masks={getMasksForTrackOrder(activeMaskInfos, track.trackOrder)}
                         renderDepth={renderDepth}
                         compositionRenderMode={subItem.type === 'composition' && hasLinkedAudioCompanion(resolvedItems, subItem) ? 'visual-only' : 'full'}

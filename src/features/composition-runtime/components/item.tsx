@@ -40,6 +40,7 @@ const MAX_RENDER_DEPTH = 16;
 interface ItemProps {
   item: TimelineItem;
   muted?: boolean;
+  visible?: boolean;
   /** Active masks that should clip this item's content */
   masks?: MaskInfo[];
   /** Current composition nesting depth (prevents infinite recursion) */
@@ -63,7 +64,7 @@ interface ItemProps {
  *
  * Memoized to prevent unnecessary re-renders when parent (MainComposition) updates.
  */
-export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], renderDepth = 0, compositionRenderMode = 'full', audioGainMultiplier = 1, audioGainLiveItemIds }) => {
+export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true, masks = [], renderDepth = 0, compositionRenderMode = 'full', audioGainMultiplier = 1, audioGainLiveItemIds }) => {
   // Use muted prop directly - MainComposition already passes track.muted
   // Avoiding store subscription here prevents re-render issues with @legacy-video/media Audio
 
@@ -229,6 +230,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
         <CompositionContent
           item={item as AudioItem & { compositionId: string }}
           parentMuted={muted}
+          parentVisible={visible}
           renderDepth={renderDepth + 1}
           renderMode="audio-only"
           audioGainMultiplier={audioGainMultiplier}
@@ -385,6 +387,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
         <CompositionContent
           item={item}
           parentMuted={muted}
+          parentVisible={visible}
           renderDepth={renderDepth + 1}
           renderMode={compositionRenderMode}
           audioGainMultiplier={audioGainMultiplier}
