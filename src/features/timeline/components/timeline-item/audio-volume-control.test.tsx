@@ -97,6 +97,6 @@ describe('AudioVolumeControl', () => {
 
     const label = screen.getByText('Volume -12.0 dB');
     expect(label.className).toContain('-translate-y-full');
-    expect(label).toHaveStyle({ top: 'calc(40% - 10px)' });
+    expect(label).toHaveStyle({ top: 'calc(var(--timeline-audio-volume-line-y, 40%) - 10px)' });
   });
 });

@@ -262,7 +262,13 @@ export const ClipContent = memo(function ClipContent({
         {/* Row 2: Waveform - fills remaining space */}
         {showWaveforms && (
           <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
-            <div className="absolute inset-0" style={{ transform: `scaleY(${audioWaveformScale})`, transformOrigin: '50% 50%' }}>
+            <div
+              className="absolute inset-0"
+              style={{
+                transform: `scaleY(var(--timeline-audio-waveform-scale, ${audioWaveformScale}))`,
+                transformOrigin: '50% 50%',
+              }}
+            >
               <ClipWaveform
                 mediaId={item.mediaId}
                 clipWidth={clipWidth}
