@@ -72,6 +72,7 @@ import { DragBlockedTooltip } from './drag-blocked-tooltip';
 import { ItemContextMenu } from './item-context-menu';
 import { toast } from 'sonner';
 import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
+import { useTtsGenerateDialogStore } from '@/shared/state/tts-generate-dialog';
 import type { AnimatableProperty } from '@/types/keyframe';
 import { useBentoLayoutDialogStore } from '../bento-layout-dialog-store';
 import { getRazorSplitPosition } from '../../utils/razor-snap';
@@ -1476,6 +1477,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     void insertFreezeFrame(item.id, currentFrame);
   }, [item.id, item.type]);
 
+  // Generate audio from text
+  const textContent = item.type === 'text' ? item.text : '';
+  const hasSpeakableText = textContent.trim().length > 0;
+  const handleGenerateAudioFromText = useCallback(() => {
+    if (!hasSpeakableText) return;
+    useTtsGenerateDialogStore.getState().open(textContent, item.id);
+  }, [item.id, textContent, hasSpeakableText]);
+
   const handleCaptionGeneration = useCallback((
     model: MediaTranscriptModel,
     options?: {
@@ -2802,6 +2811,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           return frame > item.from && frame < item.from + item.durationInFrames;
         })()}
         onFreezeFrame={handleFreezeFrame}
+        isTextItem={item.type === 'text' && hasSpeakableText}
+        onGenerateAudioFromText={handleGenerateAudioFromText}
         canGenerateCaptions={(item.type === 'video' || item.type === 'audio') && !!item.mediaId && !isBroken}
         canRegenerateCaptions={hasGeneratedCaptions}
         isGeneratingCaptions={isCaptionGenerationActive || transcriptStatus === 'transcribing'}

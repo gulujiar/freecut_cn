@@ -43,7 +43,7 @@ const DRAG_CURSOR_CLASSES = Object.values(DRAG_CURSOR_CLASS_BY_MODE);
 const TRACK_SECTION_DIVIDER_GAP = 0;
 const CROSS_TRACK_SNAP_THRESHOLD_PX = 18;
 
-function getDraggedLinkedPair(items: TimelineItem[], draggedItemIds: string[]): { videoItemId: string; audioItemId: string } | null {
+function getDraggedLinkedPair(items: TimelineItem[], draggedItemIds: string[]): { visualItemId: string; audioItemId: string } | null {
   if (draggedItemIds.length !== 2) {
     return null;
   }
@@ -55,19 +55,20 @@ function getDraggedLinkedPair(items: TimelineItem[], draggedItemIds: string[]): 
     return null;
   }
 
-  const videoItem = draggedItems.find((draggedItem) => draggedItem.type === 'video');
+  // Any visual item (non-audio) paired with an audio item counts as a linked pair
+  const visualItem = draggedItems.find((draggedItem) => draggedItem.type !== 'audio');
   const audioItem = draggedItems.find((draggedItem) => draggedItem.type === 'audio');
-  if (!videoItem || !audioItem) {
+  if (!visualItem || !audioItem) {
     return null;
   }
 
-  const linkedIds = new Set(getLinkedItemIds(items, videoItem.id));
+  const linkedIds = new Set(getLinkedItemIds(items, visualItem.id));
   if (!linkedIds.has(audioItem.id)) {
     return null;
   }
 
   return {
-    videoItemId: videoItem.id,
+    visualItemId: visualItem.id,
     audioItemId: audioItem.id,
   };
 }
@@ -101,7 +102,7 @@ function resolveDraggedTrackTargets(params: {
     return {
       tracks: linkedTrackTargets.tracks,
       trackAssignments: new Map<string, string>([
-        [linkedPair.videoItemId, linkedTrackTargets.videoTrackId],
+        [linkedPair.visualItemId, linkedTrackTargets.videoTrackId],
         [linkedPair.audioItemId, linkedTrackTargets.audioTrackId],
       ]),
     };
