@@ -112,9 +112,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   onCreatePreComp,
   isTextItem,
   onGenerateAudioFromText,
-  canDetectScenes,
-  isDetectingScenes,
-  onDetectScenes,
+  // canDetectScenes, isDetectingScenes, onDetectScenes — disabled pending optical flow tuning
 }: ItemContextMenuProps) {
   const hotkeys = useResolvedHotkeys();
   const selectedCount = useSelectionStore((s) => s.selectedItemIds.length);

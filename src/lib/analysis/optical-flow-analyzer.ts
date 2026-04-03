@@ -93,7 +93,6 @@ export class OpticalFlowAnalyzer {
     const errors = info.messages.filter(m => m.type === 'error');
     if (errors.length > 0) {
       for (const err of errors) {
-        // eslint-disable-next-line no-console
         console.error(`[OpticalFlow] Shader error: ${err.message} (line ${err.lineNum}:${err.linePos})`);
       }
       return false;
