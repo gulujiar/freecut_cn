@@ -88,6 +88,7 @@ import {
   getLinkedItemIds,
   getLinkedItems,
   getLinkedSyncOffsetFrames,
+  getSynchronizedLinkedItems,
   hasLinkedItems,
 } from '../../utils/linked-items';
 import { getVisibleTrackIds } from '../../utils/group-utils';
@@ -127,7 +128,7 @@ import { getAudioFadePixels, getAudioFadeSecondsFromOffset, type AudioFadeHandle
 import { getAudioFadeCurveControlPoint, getAudioFadeCurveFromOffset, getAudioFadeCurvePath } from '../../utils/audio-fade-curve';
 import { getAudioVolumeDbFromDragDelta, getAudioVisualizationScale, getAudioVolumeLineY } from '../../utils/audio-volume';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
-import { findHandleNeighborWithTransitions } from '../../utils/transition-linked-neighbors';
+import { findEditNeighborsWithTransitions, findHandleNeighborWithTransitions, findNearestNeighbors } from '../../utils/transition-linked-neighbors';
 import { detectScenes } from '../../deps/analysis';
 import { resolveMediaUrl } from '../../deps/media-library-resolver';
 const CAPTION_GENERATION_OVERLAY_ID = 'caption-generation';
@@ -728,6 +729,26 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }, [item.id])
   );
 
+  // Linked slip companion: true when another clip is being slipped and this
+  // item receives a linked sourceStart/sourceEnd preview update.
+  const isLinkedSlipCompanion = useSlipEditPreviewStore(
+    useCallback((s) => s.itemId !== null && s.itemId !== item.id, [item.id])
+  ) && linkedEditPreviewUpdate !== null && linkedEditPreviewUpdate.sourceStart !== undefined;
+
+  // Linked slide companion: true when another clip is being slid and this
+  // item receives a linked from-offset preview update.
+  const linkedSlideActiveItemId = useSlideEditPreviewStore(
+    useCallback((s) => {
+      if (!s.itemId || s.itemId === item.id) return null;
+      // Not a neighbor — must be a linked companion
+      if (s.leftNeighborId === item.id || s.rightNeighborId === item.id) return null;
+      return s.itemId;
+    }, [item.id])
+  );
+  const isLinkedSlideCompanion = linkedSlideActiveItemId !== null
+    && linkedEditPreviewUpdate !== null
+    && linkedEditPreviewUpdate.from !== undefined;
+
   // Slide edit preview: real-time visual offsets during slide drag.
   // - Slid clip: position shifts by slideDelta
   // - Left neighbor: end extends/shrinks by slideDelta (width change only)
@@ -1054,6 +1075,37 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       const { items } = useTimelineStore.getState();
       const { transitions } = useTransitionsStore.getState();
 
+      // Compute wall positions — tightest constraint across the sliding clip
+      // AND its linked A/V companions so both tracks are respected.
+      const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled;
+      const participants = linkedSelectionEnabled
+        ? getSynchronizedLinkedItems(items, item.id)
+        : [item];
+
+      const adjacentIds = new Set<string>();
+      if (slideLeftNeighborForSlidItem) adjacentIds.add(slideLeftNeighborForSlidItem.id);
+      if (slideRightNeighborForSlidItem) adjacentIds.add(slideRightNeighborForSlidItem.id);
+      for (const p of participants) adjacentIds.add(p.id);
+
+      let leftWallFrame: number | null = null;
+      let rightWallFrame: number | null = null;
+      for (const participant of participants) {
+        const nearest = findNearestNeighbors(participant, items);
+        if (nearest.leftNeighbor && !adjacentIds.has(nearest.leftNeighbor.id)) {
+          const wall = nearest.leftNeighbor.from + nearest.leftNeighbor.durationInFrames;
+          const maxLeft = -(participant.from - wall);
+          // Convert to limit on the primary item's frame space
+          const primaryWall = item.from + maxLeft;
+          if (leftWallFrame === null || primaryWall > leftWallFrame) leftWallFrame = primaryWall;
+        }
+        if (nearest.rightNeighbor && !adjacentIds.has(nearest.rightNeighbor.id)) {
+          const wall = nearest.rightNeighbor.from;
+          const maxRight = wall - (participant.from + participant.durationInFrames);
+          const primaryWall = item.from + item.durationInFrames + maxRight;
+          if (rightWallFrame === null || primaryWall < rightWallFrame) rightWallFrame = primaryWall;
+        }
+      }
+
       return getSlideOperationBoundsVisual({
         item,
         items,
@@ -1066,6 +1118,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         constrained: slipSlideConstrained,
         currentLeftPx,
         currentRightPx,
+        leftWallFrame,
+        rightWallFrame,
       });
     }
 
@@ -1076,6 +1130,55 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         frameToPixels,
         constraintEdge: slipSlideConstraintEdge,
         constrained: slipSlideConstrained,
+        currentLeftPx,
+        currentRightPx,
+      });
+    }
+
+    // Linked slide companion: show the limit box with wall constraints from this track
+    if (isLinkedSlideCompanion) {
+      const { items } = useTimelineStore.getState();
+      const { transitions } = useTransitionsStore.getState();
+
+      // Find this companion's own adjacent neighbors
+      const companionNeighbors = findEditNeighborsWithTransitions(item, items, transitions);
+      const companionLeftNeighbor = companionNeighbors.leftNeighbor;
+      const companionRightNeighbor = companionNeighbors.rightNeighbor;
+
+      // Compute walls for the companion's track
+      const companionNearest = findNearestNeighbors(item, items);
+      const companionLeftWall = companionNearest.leftNeighbor && companionNearest.leftNeighbor.id !== companionLeftNeighbor?.id
+        ? companionNearest.leftNeighbor.from + companionNearest.leftNeighbor.durationInFrames
+        : null;
+      const companionRightWall = companionNearest.rightNeighbor && companionNearest.rightNeighbor.id !== companionRightNeighbor?.id
+        ? companionNearest.rightNeighbor.from
+        : null;
+
+      return getSlideOperationBoundsVisual({
+        item,
+        items,
+        transitions,
+        fps,
+        frameToPixels,
+        leftNeighbor: companionLeftNeighbor,
+        rightNeighbor: companionRightNeighbor,
+        constraintEdge: null,
+        constrained: false,
+        currentLeftPx,
+        currentRightPx,
+        leftWallFrame: companionLeftWall,
+        rightWallFrame: companionRightWall,
+      });
+    }
+
+    // Linked slip companion: show the limit box for this item's own source bounds
+    if (isLinkedSlipCompanion) {
+      return getSlipOperationBoundsVisual({
+        item: previewBaseItem,
+        fps,
+        frameToPixels,
+        constraintEdge: null,
+        constrained: false,
         currentLeftPx,
         currentRightPx,
       });
@@ -1103,6 +1206,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     visualLeft,
     visualWidth,
     contentPreviewItem,
+    isLinkedSlipCompanion,
+    isLinkedSlideCompanion,
+    previewBaseItem,
   ]);
 
   // Active edge state for halo rendering (trim, roll, slip, slide, stretch)
@@ -1113,6 +1219,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       ? { start: rollingEditHandle === 'end', end: rollingEditHandle === 'start', constrainedEdge: rollingEditConstrained ? 'both' : null }
       : isSlipSlideActive
       ? { start: true, end: true, constrainedEdge: slipSlideConstrained ? (slipSlideConstraintEdge ?? 'both') : null }
+      : isLinkedSlipCompanion || isLinkedSlideCompanion
+      ? { start: true, end: true, constrainedEdge: null }
       : isStretching
       ? { start: stretchHandle === 'start', end: stretchHandle === 'end', constrainedEdge: stretchConstrained ? stretchHandle : null }
       : null;

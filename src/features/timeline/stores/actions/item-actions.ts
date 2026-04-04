@@ -1766,7 +1766,7 @@ export function slideItem(
       useTimelineSettingsStore.getState().fps,
     );
 
-    // Adjust neighbors (order: shrink first, then extend â€” same as rolling edit)
+    // Adjust neighbors (order: shrink first, then extend — same as rolling edit)
     if (clampedSlideDelta > 0) {
       // Sliding right: right neighbor shrinks start (frees space), left neighbor extends end
       if (rightNeighborId) {

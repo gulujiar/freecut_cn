@@ -18,7 +18,7 @@ import {
   timelineToSourceFrames,
 } from '../utils/source-calculations';
 import { clampTrimAmount, clampToAdjacentItems } from '../utils/trim-utils';
-import { findEditNeighborsWithTransitions } from '../utils/transition-linked-neighbors';
+import { findEditNeighborsWithTransitions, findNearestNeighbors } from '../utils/transition-linked-neighbors';
 import { computeClampedSlipDelta } from '../utils/slip-utils';
 import {
   getMatchingSynchronizedLinkedCounterpart,
@@ -94,8 +94,8 @@ export function useTimelineSlipSlide(
   }, [item.id]);
 
   /**
-   * Find immediate edit neighbors on the same track.
-   * Prefers strict adjacency, falls back to transition-linked neighbors.
+   * Find immediate edit neighbors (strict adjacency / transition-linked).
+   * Only adjacent neighbors get trimmed during slide.
    */
   const findNeighbors = useCallback(() => {
     const allItems = useTimelineStore.getState().items;
@@ -142,7 +142,8 @@ export function useTimelineSlipSlide(
   }, [getItemFromStore]);
 
   /**
-   * Clamp slide delta to neighbor source boundaries and timeline start.
+   * Clamp slide delta to neighbor source boundaries, timeline start,
+   * and non-adjacent clip boundaries (can't overlap clips across a gap).
    */
   const clampSlideDelta = useCallback((delta: number, leftNeighborId: string | null, rightNeighborId: string | null): number => {
     const currentItem = getItemFromStore();
@@ -156,7 +157,7 @@ export function useTimelineSlipSlide(
     const allItems = useTimelineStore.getState().items;
     const slidItemIds = new Set([item.id, leftNeighborId, rightNeighborId].filter(Boolean) as string[]);
 
-    // Left neighbor: clamp by source limits
+    // Adjacent neighbors: clamp by source limits (standard slide behavior)
     if (leftNeighborId) {
       const leftNeighbor = allItems.find((i) => i.id === leftNeighborId);
       if (leftNeighbor) {
@@ -164,7 +165,6 @@ export function useTimelineSlipSlide(
         if (Math.abs(clampedAmount) < Math.abs(clamped)) {
           clamped = clampedAmount;
         }
-        // Also clamp so the neighbor doesn't overlap clips beyond it
         const adjacentClamped = clampToAdjacentItems(leftNeighbor, 'end', clamped, allItems, slidItemIds);
         if (Math.abs(adjacentClamped) < Math.abs(clamped)) {
           clamped = adjacentClamped;
@@ -172,7 +172,6 @@ export function useTimelineSlipSlide(
       }
     }
 
-    // Right neighbor: clamp by source limits
     if (rightNeighborId) {
       const rightNeighbor = allItems.find((i) => i.id === rightNeighborId);
       if (rightNeighbor) {
@@ -180,11 +179,37 @@ export function useTimelineSlipSlide(
         if (Math.abs(clampedAmount) < Math.abs(clamped)) {
           clamped = clampedAmount;
         }
-        // Also clamp so the neighbor doesn't overlap clips beyond it
         const adjacentClamped = clampToAdjacentItems(rightNeighbor, 'start', clamped, allItems, slidItemIds);
         if (Math.abs(adjacentClamped) < Math.abs(clamped)) {
           clamped = adjacentClamped;
         }
+      }
+    }
+
+    // Non-adjacent clips: can't slide past their boundary (wall behavior).
+    // Check the sliding clip AND its linked companions on other tracks,
+    // so linked A/V pairs both contribute to the wall calculation.
+    const participantIds = new Set<string>(slidItemIds);
+
+    // Gather all clips that move with the slide (the clip itself + linked companions)
+    const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled;
+    const participants = linkedSelectionEnabled
+      ? getSynchronizedLinkedItems(allItems, currentItem.id)
+      : [currentItem];
+
+    for (const participant of participants) {
+      const nearest = findNearestNeighbors(participant, allItems);
+      const pEnd = participant.from + participant.durationInFrames;
+
+      if (nearest.leftNeighbor && !participantIds.has(nearest.leftNeighbor.id)) {
+        const wallRight = nearest.leftNeighbor.from + nearest.leftNeighbor.durationInFrames;
+        const maxLeft = -(participant.from - wallRight);
+        if (clamped < maxLeft) clamped = maxLeft;
+      }
+      if (nearest.rightNeighbor && !participantIds.has(nearest.rightNeighbor.id)) {
+        const wallLeft = nearest.rightNeighbor.from;
+        const maxRight = wallLeft - pEnd;
+        if (clamped > maxRight) clamped = maxRight;
       }
     }
 
