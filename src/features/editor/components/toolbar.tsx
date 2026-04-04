@@ -27,6 +27,7 @@ import { SettingsDialog } from './settings-dialog';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { UnsavedChangesDialog } from './unsaved-changes-dialog';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { cn } from '@/shared/ui/cn';
 import { useDebugStore } from '@/features/editor/stores/debug-store';
 
 interface ToolbarProps {
@@ -217,7 +218,7 @@ function DebugPopover({ projectId }: { projectId: string }) {
         <Button
           variant="outline"
           size="icon"
-          className={`h-7 w-7 ${debugPanelOpen ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : ''}`}
+          className={cn('h-7 w-7', debugPanelOpen && 'bg-amber-500/20 border-amber-500/50 text-amber-400')}
           data-tooltip={debugPanelOpen ? undefined : 'Debug Panel'}
           data-tooltip-side="bottom"
           aria-label="Debug panel"

@@ -1,8 +1,8 @@
 ﻿/**
  * Project Debug Panel
  *
- * Floating debug panel for project data operations.
- * Only visible in development mode.
+ * Project data operations UI rendered inside the toolbar popover.
+ * Visibility is controlled by the parent DebugPopover component.
  */
 
 import { useState, useCallback, useEffect } from 'react';
