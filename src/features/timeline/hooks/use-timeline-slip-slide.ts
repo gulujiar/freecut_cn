@@ -165,7 +165,10 @@ export function useTimelineSlipSlide(
         useLinkedEditPreviewStore.getState().setUpdates(updates);
       }
     }
-  }, [findNeighbors, getItemFromStore, item.id, setDragState, clampSlideDelta]);
+  // Note: clampSlideDelta intentionally omitted — it reads fps from store at
+  // call time, and including it would cause a TDZ error (defined after this hook).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [findNeighbors, getItemFromStore, item.id, setDragState]);
 
   /**
    * Clamp slip delta to source boundaries.
