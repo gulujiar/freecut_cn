@@ -295,11 +295,13 @@ export function useTimelineSlipSlide(
       const mode = stateRef.current.mode;
 
       if (mode === 'slip') {
-        // Convert timeline frame delta to source frame delta
+        // Convert timeline frame delta to source frame delta.
+        // Inverted: drag right → source window moves left (reveals earlier content),
+        // matching DaVinci Resolve convention.
         const currentItem = getItemFromStore();
         const { speed, sourceFps } = getSourceProperties(currentItem);
         const effectiveSourceFps = sourceFps ?? fps;
-        const sourceFramesDelta = timelineToSourceFrames(deltaFrames, speed, fps, effectiveSourceFps);
+        const sourceFramesDelta = -timelineToSourceFrames(deltaFrames, speed, fps, effectiveSourceFps);
 
         const sourceClamped = clampSlipDelta(sourceFramesDelta);
         const transitionClamped = clampSlipDeltaToPreserveTransitions(

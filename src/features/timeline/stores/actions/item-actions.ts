@@ -434,18 +434,46 @@ export function rippleDeleteItems(ids: string[]): void {
 
   const updates = buildLinkedLeftShiftUpdates(remainingItems, baseShiftByItemId);
 
+  // Detect non-shifted items that would be overlapped by shifted items.
+  // These get deleted rather than creating overlaps.
+  const shiftedById = new Map(updates.map((u) => [u.id, u.from]));
+  const coveredIds: string[] = [];
+  for (const item of remainingItems) {
+    if (shiftedById.has(item.id) || idsToDelete.has(item.id)) continue;
+    const itemEnd = item.from + item.durationInFrames;
+    // Check if any shifted item on the same track would overlap this item
+    for (const other of remainingItems) {
+      const newFrom = shiftedById.get(other.id);
+      if (newFrom === undefined || other.trackId !== item.trackId) continue;
+      const newEnd = newFrom + other.durationInFrames;
+      if (newFrom < itemEnd && newEnd > item.from) {
+        coveredIds.push(item.id);
+        break;
+      }
+    }
+  }
+
+  const allRemoveIds = [...expandedIds, ...coveredIds];
+
   execute('RIPPLE_DELETE_ITEMS', () => {
-    useItemsStore.getState()._removeItems(expandedIds);
+    useItemsStore.getState()._removeItems(allRemoveIds);
     if (updates.length > 0) {
-      useItemsStore.getState()._moveItems(updates);
+      // Filter out updates for items that were removed as covered
+      const coveredSet = new Set(coveredIds);
+      const filteredUpdates = coveredSet.size > 0
+        ? updates.filter((u) => !coveredSet.has(u.id))
+        : updates;
+      if (filteredUpdates.length > 0) {
+        useItemsStore.getState()._moveItems(filteredUpdates);
+      }
     }
 
     // Cascade: Remove transitions and keyframes
-    useTransitionsStore.getState()._removeTransitionsForItems(expandedIds);
-    useKeyframesStore.getState()._removeKeyframesForItems(expandedIds);
+    useTransitionsStore.getState()._removeTransitionsForItems(allRemoveIds);
+    useKeyframesStore.getState()._removeKeyframesForItems(allRemoveIds);
 
     useTimelineSettingsStore.getState().markDirty();
-  }, { ids: expandedIds });
+  }, { ids: allRemoveIds });
 }
 
 export function closeGapAtPosition(trackId: string, frame: number): void {
@@ -482,7 +510,29 @@ export function closeGapAtPosition(trackId: string, frame: number): void {
   const updates = buildLinkedLeftShiftUpdates(items, baseShiftByItemId);
   if (updates.length === 0) return;
 
+  // Detect non-shifted items that would be overlapped by shifted items — delete them.
+  const shiftedById = new Map(updates.map((u) => [u.id, u.from]));
+  const coveredIds: string[] = [];
+  for (const item of items) {
+    if (shiftedById.has(item.id)) continue;
+    const itemEnd = item.from + item.durationInFrames;
+    for (const other of items) {
+      const newFrom = shiftedById.get(other.id);
+      if (newFrom === undefined || other.trackId !== item.trackId) continue;
+      const newEnd = newFrom + other.durationInFrames;
+      if (newFrom < itemEnd && newEnd > item.from) {
+        coveredIds.push(item.id);
+        break;
+      }
+    }
+  }
+
   execute('CLOSE_GAP', () => {
+    if (coveredIds.length > 0) {
+      useItemsStore.getState()._removeItems(coveredIds);
+      useTransitionsStore.getState()._removeTransitionsForItems(coveredIds);
+      useKeyframesStore.getState()._removeKeyframesForItems(coveredIds);
+    }
     useItemsStore.getState()._moveItems(updates);
 
     applyTransitionRepairs(updates.map((update) => update.id));
