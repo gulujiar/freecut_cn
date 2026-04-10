@@ -1,5 +1,6 @@
 import { memo, useCallback, useMemo } from 'react';
 import { Blend, Info } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { resolveTransitionTargetFromSelection } from '@/features/editor/deps/timeline-utils';
@@ -13,7 +14,6 @@ import { cn } from '@/shared/ui/cn';
 import { TRANSITION_DRAG_MIME, useTransitionDragStore } from '@/shared/state/transition-drag';
 import {
   TRANSITION_ICON_MAP,
-  TRANSITION_CATEGORY_INFO,
   TRANSITION_CATEGORY_ORDER,
   getTransitionPresentationConfigs,
   getTransitionConfigsByCategory,
@@ -40,7 +40,18 @@ const TransitionCard = memo(function TransitionCard({
   onDragStart,
   onDragEnd,
 }: TransitionCardProps) {
+  const { t } = useTranslation();
   const Icon = TRANSITION_ICON_MAP[config.icon] ?? Blend;
+
+  const getTransitionLabel = () => {
+    const baseLabel = t(`transitions.${config.id}`);
+    if (config.direction) {
+      const directionKey = config.direction.replace('from-', '');
+      const directionLabel = t(`transitions.direction${directionKey.charAt(0).toUpperCase() + directionKey.slice(1)}`);
+      return directionLabel;
+    }
+    return baseLabel;
+  };
 
   const handleClick = useCallback(() => {
     if (clickDisabled) return;
@@ -67,7 +78,7 @@ const TransitionCard = memo(function TransitionCard({
     >
       <Icon className="w-4 h-4 text-muted-foreground group-hover:text-foreground" />
       <span className="text-[10px] text-muted-foreground group-hover:text-foreground truncate w-full">
-        {config.label}
+        {getTransitionLabel()}
       </span>
     </button>
   );
@@ -95,14 +106,14 @@ const CategorySection = memo(function CategorySection({
   onDragStart,
   onDragEnd,
 }: CategorySectionProps) {
-  const info = TRANSITION_CATEGORY_INFO[category] || { title: category };
+  const { t } = useTranslation();
 
   if (configs.length === 0) return null;
 
   return (
     <div className="space-y-2">
       <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-        {info.title}
+        {t(`transitions.category${category.charAt(0).toUpperCase() + category.slice(1)}`)}
       </div>
       <div className="grid grid-cols-4 gap-1.5">
         {configs.map((config, index) => (
@@ -122,6 +133,7 @@ const CategorySection = memo(function CategorySection({
 });
 
 export const TransitionsPanel = memo(function TransitionsPanel() {
+  const { t } = useTranslation();
   const addTransition = useTimelineStore((s) => s.addTransition);
   const updateTransition = useTimelineStore((s) => s.updateTransition);
   const items = useTimelineStore((s) => s.items);
@@ -207,16 +219,16 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
           <div className="text-muted-foreground leading-relaxed">
             {hasValidClickTarget ? (
               <span className="text-primary">
-                Click to apply to the selected cut, or drag a transition onto any valid cut in the timeline.
+                {t('transitions.infoClickApply')}
               </span>
             ) : adjacentInfo?.reason ? (
-              <span>Drag a transition onto a valid cut. Click-to-apply is unavailable here: {adjacentInfo.reason}.</span>
+              <span>{t('transitions.infoDragOnly', { reason: adjacentInfo.reason })}</span>
             ) : selectionCount === 1 ? (
-              <span>Drag a transition onto a valid cut, or place clips next to each other and select one clip to click-apply.</span>
+              <span>{t('transitions.infoSelectClip')}</span>
             ) : selectionCount > 1 ? (
-              <span>Drag a transition onto a valid cut, or select a single video or image clip to click-apply.</span>
+              <span>{t('transitions.infoSelectSingle')}</span>
             ) : (
-              <span>Drag a transition onto a valid cut, or select a video or image clip to add a transition to its neighbor.</span>
+              <span>{t('transitions.infoDefault')}</span>
             )}
           </div>
         </div>

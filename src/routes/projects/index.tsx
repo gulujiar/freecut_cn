@@ -6,8 +6,8 @@ import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('ProjectsIndex');
 import { Button } from '@/components/ui/button';
-import { Plus, Upload, FolderOpen, File, Github } from 'lucide-react';
-import { FreeCutLogo } from '@/components/brand/freecut-logo';
+import { Plus, Upload, FolderOpen, File } from 'lucide-react';
+import { EditorLogo } from '@/components/brand/freecut-logo';
 import { ProjectList } from '@/features/projects/components/project-list';
 import { ProjectForm } from '@/features/projects/components/project-form';
 import {
@@ -244,25 +244,9 @@ function ProjectsIndex() {
         <div className="panel-header border-b border-border">
           <div className="max-w-[1920px] mx-auto px-6 py-5 flex items-center justify-between">
             <Link to="/">
-              <FreeCutLogo variant="full" size="md" className="hover:opacity-80 transition-opacity" />
+              <EditorLogo size="md" className="hover:opacity-80 transition-opacity" />
             </Link>
             <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="icon"
-                className="h-10 w-10"
-                asChild
-              >
-                <a
-                  href="https://github.com/walterlow/freecut"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-tooltip={t('projects.viewOnGithub')}
-                  data-tooltip-side="left"
-                >
-                  <Github className="w-5 h-5" />
-                </a>
-              </Button>
               <Button variant="outline" size="lg" className="gap-2" onClick={handleImportClick}>
                 <Upload className="w-4 h-4" />
                 {t('projects.importProject')}

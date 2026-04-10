@@ -1,27 +1,14 @@
-﻿import { cn } from '@/shared/ui/cn';
+import { cn } from '@/shared/ui/cn';
 
-interface FreeCutLogoProps {
-  variant?: 'full' | 'icon';
+interface EditorLogoProps {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
 }
 
 const sizeConfig = {
-  sm: {
-    icon: 'w-5 h-5',
-    text: 'text-base',
-    gap: 'gap-1.5',
-  },
-  md: {
-    icon: 'w-7 h-7',
-    text: 'text-xl',
-    gap: 'gap-2',
-  },
-  lg: {
-    icon: 'w-10 h-10',
-    text: 'text-3xl',
-    gap: 'gap-3',
-  },
+  sm: 'w-5 h-5',
+  md: 'w-7 h-7',
+  lg: 'w-10 h-10',
 };
 
 function ScissorIcon({ className }: { className?: string }) {
@@ -39,25 +26,8 @@ function ScissorIcon({ className }: { className?: string }) {
   );
 }
 
-export function FreeCutLogo({ variant = 'full', size = 'md', className }: FreeCutLogoProps) {
+export function EditorLogo({ size = 'md', className }: EditorLogoProps) {
   const config = sizeConfig[size];
 
-  if (variant === 'icon') {
-    return <ScissorIcon className={cn(config.icon, 'text-primary', className)} />;
-  }
-
-  return (
-    <div className={cn('flex items-center', config.gap, className)}>
-      <ScissorIcon className={cn(config.icon, 'text-primary')} />
-      <span
-        className={cn(
-          config.text,
-          'font-semibold tracking-tight text-foreground'
-        )}
-      >
-        FreeCut
-      </span>
-    </div>
-  );
+  return <ScissorIcon className={cn(config, 'text-primary', className)} />;
 }
-

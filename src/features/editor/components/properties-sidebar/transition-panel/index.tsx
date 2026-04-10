@@ -1,4 +1,5 @@
 import { useMemo, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -32,7 +33,6 @@ import {
 import { cn } from '@/shared/ui/cn';
 import { transitionRegistry } from '@/domain/timeline/transitions';
 import {
-  TRANSITION_CATEGORY_INFO,
   getTransitionConfigsByCategory,
 } from '@/features/editor/utils/transition-ui-config';
 import { getMaxTransitionDurationForHandles } from '@/features/editor/deps/timeline-utils';
@@ -41,16 +41,25 @@ function getPresentationOptionValue(config: Pick<PresentationConfig, 'id' | 'dir
   return config.direction ? `${config.id}:${config.direction}` : config.id;
 }
 
-function getPresentationOptionLabel(config: Pick<PresentationConfig, 'label' | 'description' | 'direction'>): string {
-  return config.direction ? config.description : config.label;
+function getPresentationOptionLabel(
+  config: Pick<PresentationConfig, 'id' | 'direction'>,
+  t: (key: string) => string
+): string {
+  const baseLabel = t(`transitions.${config.id}`);
+  if (config.direction) {
+    const directionKey = config.direction.replace('from-', '');
+    const directionLabel = t(`transitions.direction${directionKey.charAt(0).toUpperCase() + directionKey.slice(1)}`);
+    return `${baseLabel} - ${directionLabel}`;
+  }
+  return baseLabel;
 }
 
 const EASE_OPTIONS = [
-  { value: 'linear', label: 'Linear' },
-  { value: 'ease-in', label: 'In' },
-  { value: 'ease-out', label: 'Out' },
-  { value: 'ease-in-out', label: 'In & Out' },
-] as const satisfies ReadonlyArray<{ value: TransitionTiming; label: string }>;
+  { value: 'linear', labelKey: 'easeLinear' },
+  { value: 'ease-in', labelKey: 'easeIn' },
+  { value: 'ease-out', labelKey: 'easeOut' },
+  { value: 'ease-in-out', labelKey: 'easeInOut' },
+] as const satisfies ReadonlyArray<{ value: TransitionTiming; labelKey: string }>;
 
 function getSupportedEaseOptions(
   supportedTimings: readonly TransitionTiming[],
@@ -63,6 +72,7 @@ function getSupportedEaseOptions(
  * Allows editing presentation style, duration, timing, and direction.
  */
 export function TransitionPanel() {
+  const { t } = useTranslation();
   // Granular selectors (Zustand v5 best practice)
   const selectedTransitionId = useSelectionStore(
     (s: SelectionState) => s.selectedTransitionId
@@ -245,28 +255,28 @@ export function TransitionPanel() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <Zap className="w-8 h-8 text-muted-foreground/50 mb-2" />
-        <p className="text-xs text-muted-foreground">Transition not found</p>
+        <p className="text-xs text-muted-foreground">{t('transitions.notFound')}</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <PropertySection title="Transition" icon={Zap} defaultOpen={true}>
-        <PropertyRow label="Preset" tooltip="Transition style preset">
+      <PropertySection title={t('sidebar.transitions')} icon={Zap} defaultOpen={true}>
+        <PropertyRow label={t('transitions.preset')} tooltip="Transition style preset">
           <div className="w-full">
             <Select
               value={currentPresentationConfig ? getPresentationOptionValue(currentPresentationConfig) : undefined}
               onValueChange={handlePresentationPresetChange}
             >
               <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-                <SelectValue placeholder="Select preset" />
+                <SelectValue placeholder={t('transitions.selectPreset')} />
               </SelectTrigger>
               <SelectContent>
                 {presentationConfigGroups.map(([category, configs]) => (
                   <SelectGroup key={category}>
                     <SelectLabel className="text-[10px] text-muted-foreground">
-                      {TRANSITION_CATEGORY_INFO[category]?.title ?? category}
+                      {t(`transitions.category${category.charAt(0).toUpperCase() + category.slice(1)}`)}
                     </SelectLabel>
                     {configs.map((config) => (
                       <SelectItem
@@ -274,7 +284,7 @@ export function TransitionPanel() {
                         value={getPresentationOptionValue(config)}
                         className="text-xs"
                       >
-                        {getPresentationOptionLabel(config)}
+                        {getPresentationOptionLabel(config, t)}
                       </SelectItem>
                     ))}
                   </SelectGroup>
@@ -285,7 +295,7 @@ export function TransitionPanel() {
         </PropertyRow>
 
         {/* Duration slider */}
-        <PropertyRow label="Duration" tooltip="Transition duration">
+        <PropertyRow label={t('transitions.duration')} tooltip="Transition duration">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={selectedTransition.durationInFrames}
@@ -311,7 +321,7 @@ export function TransitionPanel() {
         </PropertyRow>
 
         {easeOptions.length > 0 && (
-          <PropertyRow label="Ease" tooltip="Easing curve for the transition">
+          <PropertyRow label={t('transitions.ease')} tooltip="Easing curve for the transition">
             <div className="flex items-center gap-0.5 p-0.5 bg-secondary rounded-md">
               {easeOptions.map((option) => (
               <button
@@ -325,7 +335,7 @@ export function TransitionPanel() {
                     : 'text-muted-foreground hover:text-foreground'
                 )}
               >
-                {option.label}
+                {t(`transitions.${option.labelKey}`)}
               </button>
               ))}
             </div>
@@ -342,7 +352,7 @@ export function TransitionPanel() {
             onClick={handleDelete}
           >
             <Trash2 className="w-3 h-3 mr-1.5" />
-            Delete
+            {t('transitions.delete')}
           </Button>
         </div>
       </PropertySection>

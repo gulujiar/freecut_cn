@@ -1,4 +1,5 @@
 import { useCallback, useState, useRef, useEffect, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ArrowLeftRight, RotateCcw, LayoutDashboard, Clock } from 'lucide-react';
@@ -99,6 +100,7 @@ const ColorPicker = memo(function ColorPicker({
  * Displays and allows editing of canvas dimensions and shows project duration.
  */
 export const CanvasPanel = memo(function CanvasPanel() {
+  const { t } = useTranslation();
   // Granular selectors
   const currentProject = useProjectStore((s) => s.currentProject);
   const updateProject = useProjectStore((s) => s.updateProject);
@@ -209,7 +211,7 @@ export const CanvasPanel = memo(function CanvasPanel() {
   if (!currentProject) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-xs text-muted-foreground">No project loaded</p>
+        <p className="text-xs text-muted-foreground">{t('transitions.noProjectLoaded')}</p>
       </div>
     );
   }
@@ -217,7 +219,7 @@ export const CanvasPanel = memo(function CanvasPanel() {
   return (
     <div className="space-y-4">
       {/* Canvas Section */}
-      <PropertySection title="Canvas" icon={LayoutDashboard} defaultOpen={true}>
+      <PropertySection title={t('transitions.canvas')} icon={LayoutDashboard} defaultOpen={true}>
         <LinkedDimensions
           width={width}
           height={height}
@@ -240,7 +242,7 @@ export const CanvasPanel = memo(function CanvasPanel() {
             onClick={handleSwapDimensions}
           >
             <ArrowLeftRight className="w-3 h-3 mr-1.5" />
-            Swap
+            {t('transitions.swap')}
           </Button>
           <Button
             variant="outline"
@@ -249,12 +251,12 @@ export const CanvasPanel = memo(function CanvasPanel() {
             onClick={handleResetDimensions}
           >
             <RotateCcw className="w-3 h-3 mr-1.5" />
-            Reset
+            {t('transitions.reset')}
           </Button>
         </div>
 
         {/* Background Color */}
-        <PropertyRow label="Background">
+        <PropertyRow label={t('transitions.background')}>
           <div className="flex items-center gap-1 w-full">
             <ColorPicker
               initialColor={storedBackgroundColor}
@@ -276,20 +278,20 @@ export const CanvasPanel = memo(function CanvasPanel() {
       <Separator />
 
       {/* Duration Section */}
-      <PropertySection title="Duration" icon={Clock} defaultOpen={true}>
-        <PropertyRow label="Duration">
+      <PropertySection title={t('transitions.duration')} icon={Clock} defaultOpen={true}>
+        <PropertyRow label={t('transitions.duration')}>
           <span className="text-xs text-muted-foreground tabular-nums">
             {formatDuration(timelineDuration)}
           </span>
         </PropertyRow>
 
-        <PropertyRow label="Frame Rate">
+        <PropertyRow label={t('transitions.frameRate')}>
           <span className="text-xs text-muted-foreground tabular-nums">
             {currentProject.metadata.fps} fps
           </span>
         </PropertyRow>
 
-        <PropertyRow label="Total Frames">
+        <PropertyRow label={t('transitions.totalFrames')}>
           <span className="text-xs text-muted-foreground tabular-nums">
             {timelineDuration} fr
           </span>

@@ -123,7 +123,7 @@ export const useTimelineCommandStore = create<CommandStoreState & CommandStoreAc
           ...state.redoStack,
           { command: entry.command, beforeSnapshot: currentSnapshot, timestamp: entry.timestamp },
         ],
-        canUndo: state.undoStack.length > 1,
+        canUndo: state.undoStack.length > 0,
         canRedo: true,
       }));
     },
@@ -147,7 +147,7 @@ export const useTimelineCommandStore = create<CommandStoreState & CommandStoreAc
           { command: entry.command, beforeSnapshot: currentSnapshot, timestamp: entry.timestamp },
         ],
         canUndo: true,
-        canRedo: state.redoStack.length > 1,
+        canRedo: state.redoStack.length > 0,
       }));
     },
 

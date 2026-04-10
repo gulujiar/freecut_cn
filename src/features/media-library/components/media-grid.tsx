@@ -1,6 +1,7 @@
 import { useState, useMemo, useRef, memo } from 'react';
 import { Loader2, Upload, AlertTriangle } from 'lucide-react';
 import { createLogger } from '@/shared/logging/logger';
+import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('MediaGrid');
 import { MediaCard } from './media-card';
@@ -34,6 +35,7 @@ interface MediaGridProps {
 }
 
 export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'grid', itemSize = 3, items }: MediaGridProps) {
+  const { t } = useTranslation();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [mediaIdToDelete, setMediaIdToDelete] = useState<string | null>(null);
   const lastSelectedIdRef = useRef<string | null>(null);
@@ -172,8 +174,8 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
               <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-primary/20 animate-pulse" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-mono text-foreground tracking-wider mb-1">LOADING MEDIA LIBRARY</p>
-              <p className="text-xs text-muted-foreground font-mono">Initializing storage...</p>
+              <p className="text-sm font-mono text-foreground tracking-wider mb-1">{t('media.loading')}</p>
+              <p className="text-xs text-muted-foreground font-mono">{t('media.initializing')}</p>
             </div>
           </div>
         </div>
@@ -186,9 +188,9 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
             >
               <Upload className="w-10 h-10 text-muted-foreground" />
             </div>
-            <p className="text-base font-bold text-foreground mb-2 tracking-wide">NO MEDIA FILES</p>
+            <p className="text-base font-bold text-foreground mb-2 tracking-wide">{t('media.noMedia')}</p>
             <p className="text-sm text-muted-foreground font-light mb-3">
-              Drag and drop files or click to browse
+              {t('media.noMediaDesc')}
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">MP4</span>

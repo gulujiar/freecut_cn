@@ -494,7 +494,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
             <div className="grid grid-cols-3 gap-1.5">
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Rectangle', shapeType: 'rectangle' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: t('transitions.rectangle'), shapeType: 'rectangle' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -506,13 +506,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Square className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Rectangle
+                      {t('transitions.rectangle')}
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Circle', shapeType: 'circle' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: t('transitions.circle'), shapeType: 'circle' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -524,13 +524,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Circle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Circle
+                      {t('transitions.circle')}
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Triangle', shapeType: 'triangle' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: t('transitions.triangle'), shapeType: 'triangle' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -542,13 +542,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Triangle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Triangle
+                      {t('transitions.triangle')}
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Ellipse', shapeType: 'ellipse' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: t('transitions.ellipse'), shapeType: 'ellipse' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -560,13 +560,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Circle className="w-3.5 h-2.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Ellipse
+                      {t('transitions.ellipse')}
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Star', shapeType: 'star' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: t('transitions.star'), shapeType: 'star' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -578,13 +578,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Star className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Star
+                      {t('transitions.star')}
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Polygon', shapeType: 'polygon' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: t('transitions.polygon'), shapeType: 'polygon' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -596,13 +596,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Hexagon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Polygon
+                      {t('transitions.polygon')}
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Heart', shapeType: 'heart' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: t('transitions.heart'), shapeType: 'heart' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -614,7 +614,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Heart className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Heart
+                      {t('transitions.heart')}
                     </span>
                   </button>
 
@@ -627,7 +627,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Pen className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Pen
+                      {t('transitions.pen')}
                     </span>
                   </button>
             </div>
@@ -639,7 +639,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               {/* Blank Adjustment Layer */}
               <button
                 draggable={true}
-                onDragStart={handleTemplateDragStart({ itemType: 'adjustment', label: 'Adjustment Layer' })}
+                onDragStart={handleTemplateDragStart({ itemType: 'adjustment', label: t('transitions.adjustmentLayer') })}
                 onDragEnd={handleTemplateDragEnd}
                 onClick={() => {
                   if (shouldSuppressGeneratedItemClick()) return;
@@ -652,7 +652,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 </div>
                 <div className="text-left">
                   <div className="text-xs text-muted-foreground group-hover:text-foreground">
-                    Blank Adjustment Layer
+                    {t('transitions.blankAdjustmentLayer')}
                   </div>
                 </div>
               </button>
@@ -660,7 +660,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               {/* Presets */}
               <div>
                 <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                  Presets
+                  {t('transitions.presets')}
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
                   {EFFECT_PRESETS.map((preset) => (

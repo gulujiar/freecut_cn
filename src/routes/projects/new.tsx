@@ -6,9 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { ProjectForm } from '@/features/projects/components/project-form';
 import { useCreateProject } from '@/features/projects/hooks/use-project-actions';
 import { useProjectStore } from '@/features/projects/stores/project-store';
-import { FreeCutLogo } from '@/components/brand/freecut-logo';
-import { Button } from '@/components/ui/button';
-import { Github } from 'lucide-react';
+import { EditorLogo } from '@/components/brand/freecut-logo';
 import type { ProjectFormData } from '@/features/projects/utils/validation';
 
 const logger = createLogger('NewProject');
@@ -58,26 +56,10 @@ function NewProject() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="panel-header border-b border-border">
-        <div className="max-w-[1920px] mx-auto px-6 py-5 flex items-center justify-between">
+        <div className="max-w-[1920px] mx-auto px-6 py-5 flex items-center">
           <Link to="/">
-            <FreeCutLogo variant="full" size="md" className="hover:opacity-80 transition-opacity" />
+            <EditorLogo size="md" className="hover:opacity-80 transition-opacity" />
           </Link>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-10 w-10"
-            asChild
-          >
-            <a
-              href="https://github.com/walterlow/freecut"
-              target="_blank"
-              rel="noopener noreferrer"
-              data-tooltip={t('projects.viewOnGithub')}
-              data-tooltip-side="left"
-            >
-              <Github className="w-5 h-5" />
-            </a>
-          </Button>
         </div>
       </div>
 
