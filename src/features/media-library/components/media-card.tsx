@@ -168,6 +168,7 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
   const handleDragStart = useCallback((e: React.DragEvent) => {
     // Set drag data for timeline drop
     e.dataTransfer.effectAllowed = 'copy';
+    e.stopPropagation();
 
     // If this item is selected and there are multiple selected items, drag all of them
     const isPartOfSelection = selectedMediaIds.includes(media.id);
@@ -191,6 +192,7 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
       };
 
       e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+      e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
       // Cache for dragover access
       setMediaDragData(dragData);
     } else {
@@ -204,6 +206,7 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
       };
 
       e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+      e.dataTransfer.setData('text/plain', JSON.stringify(dragData));
       // Cache for dragover access
       setMediaDragData(dragData);
     }
@@ -227,7 +230,11 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
       document.body.appendChild(ghost);
       dragImageRef.current = ghost;
 
-      e.dataTransfer.setDragImage(ghost, w / 2, h / 2);
+      try {
+        e.dataTransfer.setDragImage(ghost, w / 2, h / 2);
+      } catch (err) {
+        // Some browsers don't support setDragImage, ignore
+      }
     }
   }, [selectedMediaIds, media.id, media.fileName, media.duration, mediaItems, mediaType]);
 
@@ -400,7 +407,8 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
             <img
               src={thumbnailUrl}
               alt={media.fileName}
-              className="w-full h-full object-contain"
+              className="w-full h-full object-contain pointer-events-none select-none"
+              draggable={false}
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
@@ -553,7 +561,7 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
     <div
       style={CARD_PERF_STYLE}
       className={`
-        ${CARD_GRID_BASE} cursor-pointer
+        ${CARD_GRID_BASE} cursor-grab active:cursor-grabbing
         ${selected
           ? 'border-primary ring-2 ring-primary/20'
           : 'border-border hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10'
@@ -579,17 +587,18 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
         onPointerLeave={handleThumbnailPointerLeave}
       >
         {thumbnailUrl ? (
-          <img
-            ref={thumbnailRef}
-            src={thumbnailUrl}
-            alt={media.fileName}
-            className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary to-panel-bg">
-            {getIcon()}
-          </div>
-        )}
+            <img
+              ref={thumbnailRef}
+              src={thumbnailUrl}
+              alt={media.fileName}
+              className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105 pointer-events-none select-none"
+              draggable={false}
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-secondary to-panel-bg">
+              {getIcon()}
+            </div>
+          )}
 
         {/* Selection glow - subtle overlay only */}
         {selected && !isImporting && (
