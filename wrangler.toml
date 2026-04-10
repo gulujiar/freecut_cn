@@ -1,0 +1,9 @@
+name = "freecut-cn"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+
+[[routes]]
+pattern = "your-domain.com/*"
+zone_name = "your-domain.com"
