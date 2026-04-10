@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { useTranslation } from 'react-i18next';
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library';
 import { useProjectStore } from '@/features/editor/deps/projects';
 import { useTimelineSettingsStore, useTimelineStore } from '@/features/editor/deps/timeline-store';
@@ -24,6 +25,7 @@ interface ProjectMediaMatchDialogProps {
 }
 
 export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogProps) {
+  const { t } = useTranslation();
   const mediaItems = useMediaLibraryStore((state) => state.mediaItems);
   const mediaLoading = useMediaLibraryStore((state) => state.isLoading);
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -190,8 +192,8 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
       });
       resolveProjectMediaMatch(choice);
     } catch (error) {
-      toast.error('Failed to update project settings', {
-        description: error instanceof Error ? error.message : 'Please try again.',
+      toast.error(t('dialogs.projectMediaMatch.failedUpdate'), {
+        description: error instanceof Error ? error.message : t('dialogs.projectMediaMatch.tryAgain'),
       });
     } finally {
       setIsApplying(false);
@@ -210,11 +212,11 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
     <Dialog open={Boolean(open && pendingProjectId === projectId && suggestion?.hasChanges)} onOpenChange={(nextOpen) => { if (!nextOpen) handleKeepCurrent(); }}>
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
-          <DialogTitle>Match Project To First Video?</DialogTitle>
+          <DialogTitle>{t('dialogs.projectMediaMatch.title')}</DialogTitle>
           <DialogDescription>
             {pendingCandidate
-              ? `"${pendingCandidate.fileName}" is the first video added to this project.`
-              : 'The first imported video can define the project size and frame rate.'}
+              ? t('dialogs.projectMediaMatch.description', { fileName: pendingCandidate.fileName })
+              : t('dialogs.projectMediaMatch.descriptionNoFile')}
           </DialogDescription>
         </DialogHeader>
 
@@ -223,16 +225,16 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
             <div className="rounded-lg border border-border/80 bg-muted/30 p-4">
               <div className="grid grid-cols-[auto_1fr_1fr] gap-x-4 gap-y-2 text-sm">
                 <div />
-                <div className="font-medium text-foreground">Current</div>
-                <div className="font-medium text-foreground">Clip</div>
-                <div className="text-muted-foreground">Size</div>
+                <div className="font-medium text-foreground">{t('dialogs.projectMediaMatch.current')}</div>
+                <div className="font-medium text-foreground">{t('dialogs.projectMediaMatch.clip')}</div>
+                <div className="text-muted-foreground">{t('dialogs.projectMediaMatch.size')}</div>
                 <div className="text-muted-foreground">
                   {currentProject.metadata.width}x{currentProject.metadata.height}
                 </div>
                 <div className="text-muted-foreground">
                   {suggestion.width}x{suggestion.height}
                 </div>
-                <div className="text-muted-foreground">Frame rate</div>
+                <div className="text-muted-foreground">{t('dialogs.projectMediaMatch.frameRate')}</div>
                 <div className="text-muted-foreground">
                   {currentProject.metadata.fps} fps
                 </div>
@@ -244,8 +246,7 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
 
             {suggestion.fpsWasRounded && (
               <p className="text-xs text-muted-foreground">
-                FreeCut matches imported video to the closest supported project frame rate.
-                This clip would use {suggestion.matchedFpsLabel} fps.
+                {t('dialogs.projectMediaMatch.fpsWasRounded', { fps: suggestion.matchedFpsLabel })}
               </p>
             )}
           </div>
@@ -253,7 +254,7 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
 
         <DialogFooter className="gap-2 sm:justify-between">
           <Button variant="ghost" onClick={handleKeepCurrent} disabled={isApplying}>
-            Keep Current
+            {t('dialogs.projectMediaMatch.keepCurrent')}
           </Button>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
             {suggestion?.sizeDiffers && suggestion?.fpsDiffers && (
@@ -263,20 +264,20 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
                   onClick={() => void applyMatch('fps-only', { matchSize: false, matchFps: true })}
                   disabled={isApplying}
                 >
-                  FPS Only
+                  {t('dialogs.projectMediaMatch.fpsOnly')}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => void applyMatch('size-only', { matchSize: true, matchFps: false })}
                   disabled={isApplying}
                 >
-                  Size Only
+                  {t('dialogs.projectMediaMatch.sizeOnly')}
                 </Button>
                 <Button
                   onClick={() => void applyMatch('match-both', { matchSize: true, matchFps: true })}
                   disabled={isApplying}
                 >
-                  Match Both
+                  {t('dialogs.projectMediaMatch.matchBoth')}
                 </Button>
               </>
             )}
@@ -285,7 +286,7 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
                 onClick={() => void applyMatch('fps-only', { matchSize: false, matchFps: true })}
                 disabled={isApplying}
               >
-                Match FPS
+                {t('dialogs.projectMediaMatch.matchFps')}
               </Button>
             )}
             {suggestion?.sizeDiffers && !suggestion?.fpsDiffers && (
@@ -293,7 +294,7 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
                 onClick={() => void applyMatch('size-only', { matchSize: true, matchFps: false })}
                 disabled={isApplying}
               >
-                Match Size
+                {t('dialogs.projectMediaMatch.matchSize')}
               </Button>
             )}
           </div>

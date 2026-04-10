@@ -155,6 +155,41 @@ export function createImportActions(
     return importTasks;
   };
 
+  const createOptimisticImportTasksFromFiles = async (files: File[]): Promise<Array<{ file: File; tempId: string; tempItem: MediaMetadata }>> => {
+    const tasks: Array<{ file: File; tempId: string; tempItem: MediaMetadata }> = [];
+
+    for (const file of files) {
+      const tempId = crypto.randomUUID();
+      const tempItem: MediaMetadata = {
+        id: tempId,
+        storageType: 'blob',
+        fileName: file.name,
+        fileSize: file.size,
+        fileLastModified: file.lastModified,
+        mimeType: getMimeType(file),
+        duration: 0,
+        width: 0,
+        height: 0,
+        fps: 30,
+        codec: 'importing...',
+        bitrate: 0,
+        tags: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      set((state) => ({
+        mediaItems: [tempItem, ...state.mediaItems],
+        importingIds: [...state.importingIds, tempId],
+        error: null,
+      }));
+
+      tasks.push({ file, tempId, tempItem });
+    }
+
+    return tasks;
+  };
+
   const importHandlesInternal = async (
     handles: FileSystemFileHandle[],
     options?: { includeDuplicatesInResults?: boolean }
@@ -210,78 +245,169 @@ export function createImportActions(
         return [];
       }
 
-      // Check if File System Access API is supported
-      if (!('showOpenFilePicker' in window)) {
-        const isBrave = 'brave' in navigator;
-        set({
-          error: isBrave
-            ? 'File System Access API is disabled in Brave. Copy the URL below, paste it in your address bar, set the flag to Enabled, and relaunch.'
-            : 'File picker not supported in this browser. Use Chrome or Edge.',
-          errorLink: isBrave ? 'brave://flags/#file-system-access-api' : null,
-        });
-        return [];
-      }
-
       const opId = createOperationId();
       const event = logger.startEvent('import', opId);
       event.set('source', 'picker');
       event.set('projectId', currentProjectId);
 
-      try {
-        // Open file picker
-        const handles = await window.showOpenFilePicker({
-          multiple: true,
-          types: [
-            {
-              description: 'Media files',
-              accept: {
-                'video/*': ['.mp4', '.webm', '.mov', '.avi', '.mkv'],
-                'audio/*': ['.mp3', '.wav', '.ogg', '.m4a', '.aac'],
-                'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'],
+      // Check if File System Access API is supported
+      if ('showOpenFilePicker' in window) {
+        try {
+          const handles = await window.showOpenFilePicker({
+            multiple: true,
+            types: [
+              {
+                description: 'Media files',
+                accept: {
+                  'video/*': ['.mp4', '.webm', '.mov', '.avi', '.mkv'],
+                  'audio/*': ['.mp3', '.wav', '.ogg', '.m4a', '.aac'],
+                  'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'],
+                },
               },
-            },
-          ],
-        });
+            ],
+          });
 
-        event.set('fileCount', handles.length);
+          event.set('fileCount', handles.length);
 
-        // Create optimistic placeholders for all files immediately
-        const importTasks = await createOptimisticImportTasks(handles);
+          const importTasks = await createOptimisticImportTasks(handles);
 
-        // Process all imports in parallel
-        const importResults = await Promise.allSettled(
-          importTasks.map(async ({ handle, tempId, file }) => {
-            const metadata = await mediaLibraryService.importMediaWithHandle(
-              handle,
-              currentProjectId
-            );
-            return { metadata, tempId, file, handle };
-          })
-        );
+          const importResults = await Promise.allSettled(
+            importTasks.map(async ({ handle, tempId, file }) => {
+              const metadata = await mediaLibraryService.importMediaWithHandle(
+                handle,
+                currentProjectId
+              );
+              return { metadata, tempId, file, handle };
+            })
+          );
 
-        const { results, importedCount, duplicateNames, unsupportedCodecFiles, failedCount } =
-          processImportResults(importResults, importTasks, set);
+          const { results, importedCount, duplicateNames, unsupportedCodecFiles, failedCount } =
+            processImportResults(importResults, importTasks, set);
 
-        showImportNotifications(duplicateNames, unsupportedCodecFiles, get);
+          showImportNotifications(duplicateNames, unsupportedCodecFiles, get);
 
-        event.success({
-          imported: importedCount,
-          duplicates: duplicateNames.length,
-          failed: failedCount,
-          unsupportedCodecs: unsupportedCodecFiles.length,
-        });
+          event.success({
+            imported: importedCount,
+            duplicates: duplicateNames.length,
+            failed: failedCount,
+            unsupportedCodecs: unsupportedCodecFiles.length,
+          });
 
-        return results;
-      } catch (error) {
-        // User cancelled or error
-        if (error instanceof Error && error.name !== 'AbortError') {
-          set({ error: error.message });
-          event.failure(error);
-        } else {
-          event.set('outcome', 'cancelled');
-          logger.event('import', { opId, outcome: 'cancelled' });
+          return results;
+        } catch (error) {
+          if (error instanceof Error && error.name !== 'AbortError') {
+            set({ error: error.message });
+            event.failure(error);
+          } else {
+            event.set('outcome', 'cancelled');
+            logger.event('import', { opId, outcome: 'cancelled' });
+          }
+          return [];
         }
-        return [];
+      } else {
+        // Fallback to traditional file input
+        logger.warn('File System Access API not supported, falling back to traditional file input');
+
+        return new Promise((resolve) => {
+          const input = document.createElement('input');
+          input.type = 'file';
+          input.multiple = true;
+          input.accept = 'video/*,audio/*,image/*';
+
+          input.onchange = async (e) => {
+            try {
+              const files = Array.from((e.target as HTMLInputElement).files || []);
+              
+              if (files.length === 0) {
+                event.set('outcome', 'cancelled');
+                logger.event('import', { opId, outcome: 'cancelled' });
+                resolve([]);
+                return;
+              }
+
+              event.set('fileCount', files.length);
+              event.set('fallback', true);
+
+              const tasks = await createOptimisticImportTasksFromFiles(files);
+              const results: MediaMetadata[] = [];
+              const duplicateNames: string[] = [];
+              const unsupportedCodecFiles: UnsupportedCodecFile[] = [];
+              let importedCount = 0;
+              let failedCount = 0;
+
+              for (const { file, tempId } of tasks) {
+                try {
+                  const metadata = await mediaLibraryService.importMediaFromFile(
+                    file,
+                    currentProjectId
+                  );
+                  
+                  if (metadata.isDuplicate) {
+                    set((state) => ({
+                      mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
+                      importingIds: state.importingIds.filter((id) => id !== tempId),
+                    }));
+                    duplicateNames.push(file.name);
+                  } else {
+                    set((state) => ({
+                      mediaItems: state.mediaItems.map((item) =>
+                        item.id === tempId ? metadata : item
+                      ),
+                      importingIds: state.importingIds.filter((id) => id !== tempId),
+                    }));
+
+                    if (metadata.mimeType.startsWith('video/')) {
+                      proxyService.setProxyKey(metadata.id, getSharedProxyKey(metadata));
+                    }
+                    results.push(metadata);
+                    importedCount += 1;
+
+                    if (metadata.hasUnsupportedCodec && metadata.audioCodec) {
+                      unsupportedCodecFiles.push({
+                        fileName: file.name,
+                        audioCodec: metadata.audioCodec,
+                        handle: null as any,
+                      });
+                    }
+                  }
+                } catch (error) {
+                  failedCount++;
+                  set((state) => ({
+                    mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
+                    importingIds: state.importingIds.filter((id) => id !== tempId),
+                  }));
+                  logger.error(`Failed to import ${file.name}`, error);
+                }
+              }
+
+              showImportNotifications(duplicateNames, unsupportedCodecFiles, get);
+
+              event.success({
+                imported: importedCount,
+                duplicates: duplicateNames.length,
+                failed: failedCount,
+                unsupportedCodecs: unsupportedCodecFiles.length,
+                fallback: true,
+              });
+
+              resolve(results);
+            } catch (error) {
+              if (error instanceof Error) {
+                set({ error: error.message });
+                event.failure(error);
+              }
+              resolve([]);
+            }
+          };
+
+          input.oncancel = () => {
+            event.set('outcome', 'cancelled');
+            logger.event('import', { opId, outcome: 'cancelled' });
+            resolve([]);
+          };
+
+          input.click();
+        });
       }
     },
 

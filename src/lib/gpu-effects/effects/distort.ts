@@ -34,7 +34,7 @@ function parseHexColor(color: string, fallback: [number, number, number, number]
 
 export const pixelate: GpuEffectDefinition = {
   id: 'gpu-pixelate',
-  name: 'Pixelate',
+  name: '像素化',
   category: 'distort',
   entryPoint: 'pixelateFragment',
   uniformSize: 16,
@@ -61,7 +61,7 @@ fn pixelateFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const rgbSplit: GpuEffectDefinition = {
   id: 'gpu-rgb-split',
-  name: 'RGB Split',
+  name: 'RGB分离',
   category: 'distort',
   entryPoint: 'rgbSplitFragment',
   uniformSize: 16,
@@ -88,7 +88,7 @@ fn rgbSplitFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const twirl: GpuEffectDefinition = {
   id: 'gpu-twirl',
-  name: 'Twirl',
+  name: '漩涡',
   category: 'distort',
   entryPoint: 'twirlFragment',
   uniformSize: 16,
@@ -126,7 +126,7 @@ fn twirlFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const wave: GpuEffectDefinition = {
   id: 'gpu-wave',
-  name: 'Wave',
+  name: '波浪',
   category: 'distort',
   entryPoint: 'waveFragment',
   uniformSize: 16,
@@ -156,7 +156,7 @@ fn waveFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const bulge: GpuEffectDefinition = {
   id: 'gpu-bulge',
-  name: 'Bulge/Pinch',
+  name: '膨胀/收缩',
   category: 'distort',
   entryPoint: 'bulgeFragment',
   uniformSize: 16,
@@ -193,7 +193,7 @@ fn bulgeFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const kaleidoscope: GpuEffectDefinition = {
   id: 'gpu-kaleidoscope',
-  name: 'Kaleidoscope',
+  name: '万花筒',
   category: 'distort',
   entryPoint: 'kaleidoscopeFragment',
   uniformSize: 16,
@@ -222,7 +222,7 @@ fn kaleidoscopeFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const mirror: GpuEffectDefinition = {
   id: 'gpu-mirror',
-  name: 'Mirror',
+  name: '镜像',
   category: 'distort',
   entryPoint: 'mirrorFragment',
   uniformSize: 16,
@@ -248,7 +248,7 @@ fn mirrorFragment(input: VertexOutput) -> @location(0) vec4f {
 // Adapted from Paper Design's fluted-glass shader (published package source).
 export const flutedGlass: GpuEffectDefinition = {
   id: 'gpu-fluted-glass',
-  name: 'Fluted Glass',
+  name: '棱纹玻璃',
   category: 'distort',
   entryPoint: 'flutedGlassFragment',
   uniformSize: 128,

@@ -1,7 +1,8 @@
-﻿import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, Link, useNavigate } from '@tanstack/react-router';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { createLogger } from '@/shared/logging/logger';
+import { useTranslation } from 'react-i18next';
 import { ProjectForm } from '@/features/projects/components/project-form';
 import { useCreateProject } from '@/features/projects/hooks/use-project-actions';
 import { useProjectStore } from '@/features/projects/stores/project-store';
@@ -25,6 +26,7 @@ export const Route = createFileRoute('/projects/new')({
 });
 
 function NewProject() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const createProject = useCreateProject();
@@ -42,12 +44,12 @@ function NewProject() {
           params: { projectId: result.project.id },
         });
       } else {
-        toast.error('Failed to create project', { description: result.error });
+        toast.error(t('projects.failedCreateProject'), { description: result.error });
         setIsSubmitting(false);
       }
     } catch (error) {
       logger.error('Failed to create project:', error);
-      toast.error('Failed to create project', { description: 'Please try again' });
+      toast.error(t('projects.failedCreateProject'), { description: t('projects.pleaseTryAgain') });
       setIsSubmitting(false);
     }
   };
@@ -70,7 +72,7 @@ function NewProject() {
               href="https://github.com/walterlow/freecut"
               target="_blank"
               rel="noopener noreferrer"
-              data-tooltip="View on GitHub"
+              data-tooltip={t('projects.viewOnGithub')}
               data-tooltip-side="left"
             >
               <Github className="w-5 h-5" />

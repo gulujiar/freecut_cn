@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { MoreVertical, PlayCircle, Edit2, Copy, Trash2, AlertTriangle, HardDrive } from 'lucide-react';
 import {
   DropdownMenu,
@@ -31,6 +32,7 @@ interface ProjectCardProps {
 }
 
 export function ProjectCard({ project, onEdit }: ProjectCardProps) {
+  const { t } = useTranslation();
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDuplicating, setIsDuplicating] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -54,10 +56,10 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
     setClearLocalFiles(false);
 
     if (!result.success) {
-      toast.error('Failed to delete project', { description: result.error });
+      toast.error(t('projects.failedDeleteProject'), { description: result.error });
     } else if (wantedLocalDelete && !result.localFilesDeleted) {
-      toast.warning('Project deleted but local files were not removed', {
-        description: 'Filesystem cleanup failed — you may need to delete the folder manually.',
+      toast.warning(t('projects.projectDeletedNotFiles'), {
+        description: t('projects.filesystemCleanupFailed'),
       });
     }
   };
@@ -71,7 +73,7 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
     setIsDuplicating(false);
 
     if (!result.success) {
-      toast.error('Failed to duplicate project', { description: result.error });
+      toast.error(t('projects.failedDuplicateProject'), { description: result.error });
     }
   };
 
@@ -124,7 +126,7 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
           <div className="flex items-center gap-2 text-white">
             <PlayCircle className="w-6 h-6" />
-            <span className="font-medium">Open in Editor</span>
+            <span className="font-medium">{t('projects.openInEditor')}</span>
           </div>
         </div>
 
@@ -168,12 +170,12 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
                   className="flex items-center gap-2 cursor-pointer"
                 >
                   <PlayCircle className="w-4 h-4" />
-                  Open in Editor
+                  打开
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleEdit} className="flex items-center gap-2">
                 <Edit2 className="w-4 h-4" />
-                Edit Settings
+                修改
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleDuplicate}
@@ -181,7 +183,7 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
                 className="flex items-center gap-2"
               >
                 <Copy className="w-4 h-4" />
-                {isDuplicating ? 'Duplicating...' : 'Duplicate'}
+                {isDuplicating ? t('projects.duplicating') : t('projects.duplicate')}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -190,7 +192,7 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
                 className="flex items-center gap-2 text-destructive focus:text-destructive"
               >
                 <Trash2 className="w-4 h-4" />
-                {isDeleting ? 'Deleting...' : 'Delete'}
+                {isDeleting ? t('projects.deleting') : t('projects.delete')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -205,11 +207,10 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-destructive" />
-                Delete Project
+                {t('projects.deleteProject')}
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete <strong>{project.name}</strong>? This action cannot be
-                undone and will permanently remove the project and all its contents.
+                {t('projects.confirmDelete')} <strong>{project.name}</strong>{t('projects.confirmDeleteSuffix')}
               </AlertDialogDescription>
             </AlertDialogHeader>
             {project.rootFolderHandle && (
@@ -223,21 +224,21 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
                     <HardDrive className="h-3.5 w-3.5 text-muted-foreground" />
-                    Also delete local files on disk
+                    {t('projects.alsoDeleteLocal')}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Remove files from the linked folder{project.rootFolderName ? ` "${project.rootFolderName}"` : ''}. This cannot be undone.
+                    {t('projects.removeFilesFrom')}{project.rootFolderName ? ` "${project.rootFolderName}"` : ''}{t('projects.removeFilesSuffix')}
                   </p>
                 </div>
               </label>
             )}
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleConfirmDelete}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Delete Project
+                {t('projects.deleteProject')}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

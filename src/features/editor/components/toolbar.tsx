@@ -1,8 +1,8 @@
 import { memo, useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
-  Bug,
   ChevronDown,
   Download,
   FolderArchive,
@@ -19,16 +19,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
 import { LocalInferenceStatusPill } from './local-inference-status-pill';
-import { ProjectDebugPanel } from './project-debug-panel';
 import { SettingsDialog } from './settings-dialog';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { UnsavedChangesDialog } from './unsaved-changes-dialog';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
-import { cn } from '@/shared/ui/cn';
-import { useDebugStore } from '@/features/editor/stores/debug-store';
 
 interface ToolbarProps {
   projectId: string;
@@ -46,7 +42,6 @@ interface ToolbarProps {
 }
 
 export const Toolbar = memo(function Toolbar({
-  projectId,
   project,
   isDirty = false,
   onSave,
@@ -54,6 +49,7 @@ export const Toolbar = memo(function Toolbar({
   onExportBundle,
 }: ToolbarProps) {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
@@ -85,9 +81,9 @@ export const Toolbar = memo(function Toolbar({
           size="icon"
           className="h-8 w-8"
           onClick={handleBackClick}
-          data-tooltip="Back to Projects"
+          data-tooltip={t('toolbar.backToProjects')}
           data-tooltip-side="right"
-          aria-label="Back to projects"
+          aria-label={t('toolbar.backToProjects')}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -103,7 +99,7 @@ export const Toolbar = memo(function Toolbar({
 
         <div className="flex flex-col -space-y-0.5">
           <h1 className="text-sm font-medium leading-none">
-            {project?.name || 'Untitled Project'}
+            {project?.name || t('toolbar.untitledProject')}
           </h1>
           <span className="font-mono text-[11px] text-muted-foreground">
             {project?.width}x{project?.height} | {project?.fps}fps
@@ -126,17 +122,14 @@ export const Toolbar = memo(function Toolbar({
       />
 
       <div className="flex items-center gap-1.5">
-        {import.meta.env.DEV && import.meta.env.VITE_SHOW_DEBUG_PANEL !== 'false' && (
-          <DebugPopover projectId={projectId} />
-        )}
         <Button
           variant="outline"
           size="icon"
           className="h-7 w-7"
           onClick={() => setShowSettingsDialog(true)}
-          data-tooltip="Settings"
-          data-tooltip-side="bottom"
-          aria-label="Settings"
+          data-tooltip={t('toolbar.settings')}
+          data-tooltip-side="left"
+          aria-label={t('toolbar.settings')}
         >
           <Settings className="h-4 w-4" />
         </Button>
@@ -145,9 +138,9 @@ export const Toolbar = memo(function Toolbar({
           size="icon"
           className="h-7 w-7"
           onClick={() => setShowShortcutsDialog(true)}
-          data-tooltip="Keyboard Shortcuts"
-          data-tooltip-side="bottom"
-          aria-label="Keyboard shortcuts"
+          data-tooltip={t('toolbar.keyboardShortcuts')}
+          data-tooltip-side="left"
+          aria-label={t('toolbar.keyboardShortcuts')}
         >
           <Keyboard className="h-4 w-4" />
         </Button>
@@ -161,9 +154,9 @@ export const Toolbar = memo(function Toolbar({
             href="https://github.com/walterlow/freecut"
             target="_blank"
             rel="noopener noreferrer"
-            data-tooltip="View on GitHub"
-            data-tooltip-side="bottom"
-            aria-label="View on GitHub"
+            data-tooltip={t('toolbar.viewOnGithub')}
+            data-tooltip-side="left"
+            aria-label={t('toolbar.viewOnGithub')}
           >
             <Github className="h-4 w-4" />
           </a>
@@ -173,7 +166,7 @@ export const Toolbar = memo(function Toolbar({
           size="sm"
           className="gap-1.5"
           onClick={handleSave}
-          aria-label="Save project"
+          aria-label={t('toolbar.save')}
         >
           <div className="relative">
             <Save className="h-4 w-4" />
@@ -181,25 +174,25 @@ export const Toolbar = memo(function Toolbar({
               <span className="absolute -right-1 -top-1 h-2 w-2 animate-pulse rounded-full bg-orange-500" />
             )}
           </div>
-          Save
+          {t('toolbar.save')}
         </Button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" className="gap-1.5 glow-primary-sm">
               <Download className="h-4 w-4" />
-              Export
+              {t('toolbar.export')}
               <ChevronDown className="h-3 w-3" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={onExport} className="gap-2">
               <Video className="h-4 w-4" />
-              Export Video
+              {t('toolbar.exportVideo')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onExportBundle} className="gap-2">
               <FolderArchive className="h-4 w-4" />
-              Download Project (.zip)
+              {t('toolbar.downloadProject')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -207,32 +200,3 @@ export const Toolbar = memo(function Toolbar({
     </div>
   );
 });
-
-function DebugPopover({ projectId }: { projectId: string }) {
-  const debugPanelOpen = useDebugStore((s) => s.debugPanelOpen);
-  const setDebugPanelOpen = useDebugStore((s) => s.setDebugPanelOpen);
-
-  return (
-    <Popover open={debugPanelOpen} onOpenChange={setDebugPanelOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
-          className={cn('h-7 w-7', debugPanelOpen && 'bg-amber-500/20 border-amber-500/50 text-amber-400')}
-          data-tooltip={debugPanelOpen ? undefined : 'Debug Panel'}
-          data-tooltip-side="bottom"
-          aria-label="Debug panel"
-        >
-          <Bug className="h-4 w-4" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        sideOffset={8}
-        className="w-64 p-0 bg-zinc-900 border-zinc-700 text-zinc-100"
-      >
-        <ProjectDebugPanel projectId={projectId} />
-      </PopoverContent>
-    </Popover>
-  );
-}

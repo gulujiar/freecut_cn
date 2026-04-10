@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -90,6 +91,7 @@ const btnSize = { width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDI
 
 export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
   const [isSavingFrame, setIsSavingFrame] = useState(false);
+  const { t } = useTranslation();
 
   // Use granular selectors - Zustand v5 best practice
   // NOTE: Don't subscribe to currentFrame - only needed in click handlers
@@ -163,7 +165,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
       }
 
       if (!frameBlob) {
-        toast.error('Failed to capture the current frame.');
+        toast.error(t('toast.failedToCaptureFrame'));
         return;
       }
 
@@ -171,7 +173,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
 
       const currentProjectId = useMediaLibraryStore.getState().currentProjectId;
       if (!currentProjectId) {
-        toast.error('Downloaded the frame, but no project is selected for media library import.');
+        toast.error(t('toast.noProjectSelectedForImport'));
         return;
       }
 
@@ -191,10 +193,10 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
         mediaItems: [savedMedia, ...state.mediaItems],
       }));
 
-      toast.success(`Saved "${savedMedia.fileName}" to the media library and started the download.`);
+      toast.success(t('toast.savedFrameToLibrary', { fileName: savedMedia.fileName }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to save frame.';
-      toast.error(`Downloaded frame, but could not save it to the media library. ${message}`);
+      toast.error(t('toast.failedToSaveFrameToLibrary', { message }));
     } finally {
       setIsSavingFrame(false);
     }
@@ -210,7 +212,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
           className="flex-shrink-0"
           style={btnSize}
           onClick={handleGoToStart}
-          data-tooltip="Go to Start (Home)"
+          data-tooltip={t('playbackControls.goToStart')}
           aria-label="Go to start"
         >
           <SkipBack className="w-3.5 h-3.5" />
@@ -222,7 +224,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
           className="flex-shrink-0"
           style={btnSize}
           onClick={handlePreviousFrame}
-          data-tooltip="Previous Frame (Left Arrow)"
+          data-tooltip={t('playbackControls.previousFrame')}
           aria-label="Previous frame"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
@@ -233,7 +235,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
           className="flex-shrink-0"
           style={btnSize}
           onClick={togglePlayPause}
-          data-tooltip={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
+          data-tooltip={isPlaying ? t('playbackControls.pause') : t('playbackControls.play')}
           aria-label={isPlaying ? 'Pause' : 'Play'}
         >
           {isPlaying ? (
@@ -249,7 +251,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
           className="flex-shrink-0"
           style={btnSize}
           onClick={handleNextFrame}
-          data-tooltip="Next Frame (Right Arrow)"
+          data-tooltip={t('playbackControls.nextFrame')}
           aria-label="Next frame"
         >
           <ChevronRight className="w-3.5 h-3.5" />
@@ -261,7 +263,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
           className="flex-shrink-0"
           style={btnSize}
           onClick={handleGoToEnd}
-          data-tooltip="Go to End (End)"
+          data-tooltip={t('playbackControls.goToEnd')}
           aria-label="Go to end"
         >
           <SkipForward className="w-3.5 h-3.5" />
@@ -281,7 +283,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
             void handleSaveFrame();
           }}
           disabled={isSavingFrame}
-          data-tooltip={isSavingFrame ? 'Saving Frame...' : 'Save Frame'}
+          data-tooltip={isSavingFrame ? t('playbackControls.savingFrame') : t('playbackControls.saveFrame')}
           aria-label={isSavingFrame ? 'Saving frame' : 'Save frame'}
         >
           {isSavingFrame ? (
@@ -306,7 +308,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
               : 'text-muted-foreground hover:text-foreground'
           }`}
           onClick={toggleUseProxy}
-          data-tooltip={useProxy ? 'Proxy Playback: On' : 'Proxy Playback: Off'}
+          data-tooltip={useProxy ? t('playbackControls.proxyPlaybackOn') : t('playbackControls.proxyPlaybackOff')}
           aria-label={useProxy ? 'Disable proxy playback' : 'Enable proxy playback'}
         >
           <Zap className="w-3.5 h-3.5" />

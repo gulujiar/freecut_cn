@@ -1,9 +1,8 @@
 import { useCallback, useMemo, useRef, useEffect, memo, Activity } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronUp,
   Film,
   Layers,
   LineChart,
@@ -18,9 +17,7 @@ import {
   Sparkles,
   Blend,
   Pen,
-  WandSparkles,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { useEditorStore } from '@/shared/state/editor';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
@@ -49,7 +46,6 @@ import { getGpuCategoriesWithEffects, getGpuEffectDefaultParams } from '@/infras
 import { useEffectPreviews } from '@/features/editor/deps/effects-contract';
 import { createLogger } from '@/shared/logging/logger';
 import { useSettingsStore } from '@/features/editor/deps/settings';
-import { AiPanel } from './ai-panel';
 import {
   EDITOR_LAYOUT_CSS_VALUES,
   clampLeftEditorSidebarWidth,
@@ -59,13 +55,12 @@ import {
 const logger = createLogger('MediaSidebar');
 
 export const MediaSidebar = memo(function MediaSidebar() {
+  const { t } = useTranslation();
   const editorDensity = useSettingsStore((s) => s.editorDensity);
   const editorLayout = getEditorLayout(editorDensity);
   // Use granular selectors - Zustand v5 best practice
   const leftSidebarOpen = useEditorStore((s) => s.leftSidebarOpen);
   const toggleLeftSidebar = useEditorStore((s) => s.toggleLeftSidebar);
-  const mediaFullColumn = useEditorStore((s) => s.mediaFullColumn);
-  const toggleMediaFullColumn = useEditorStore((s) => s.toggleMediaFullColumn);
   const keyframeEditorOpen = useEditorStore((s) => s.keyframeEditorOpen);
   const setKeyframeEditorOpen = useEditorStore((s) => s.setKeyframeEditorOpen);
   const toggleKeyframeEditorOpen = useEditorStore((s) => s.toggleKeyframeEditorOpen);
@@ -325,12 +320,11 @@ export const MediaSidebar = memo(function MediaSidebar() {
 
   // Category items for the vertical nav
   const categories = [
-    { id: 'media' as const, icon: Film, label: 'Media' },
-    { id: 'text' as const, icon: Type, label: 'Text' },
-    { id: 'shapes' as const, icon: Pentagon, label: 'Shapes' },
-    { id: 'effects' as const, icon: Layers, label: 'Effects' },
-    { id: 'transitions' as const, icon: Blend, label: 'Transitions' },
-    { id: 'ai' as const, icon: WandSparkles, label: 'AI' },
+    { id: 'media' as const, icon: Film, label: t('sidebar.media') },
+    { id: 'text' as const, icon: Type, label: t('sidebar.text') },
+    { id: 'shapes' as const, icon: Pentagon, label: t('sidebar.shapes') },
+    { id: 'effects' as const, icon: Layers, label: t('sidebar.effects') },
+    { id: 'transitions' as const, icon: Blend, label: t('sidebar.transitions') },
   ];
 
   const shouldSuppressGeneratedItemClick = useCallback(() => {
@@ -380,9 +374,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
         >
           <button
             onClick={toggleLeftSidebar}
-            className="rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
-            style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
-            data-tooltip={leftSidebarOpen ? 'Collapse Panel' : 'Expand Panel'}
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+            data-tooltip={leftSidebarOpen ? t('sidebar.collapse') : t('sidebar.expand')}
             data-tooltip-side="right"
           >
             {leftSidebarOpen ? (
@@ -432,9 +425,9 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               }
             `}
-            data-tooltip={keyframeEditorOpen ? 'Hide Keyframe Editor' : 'Keyframe Editor'}
+            data-tooltip={keyframeEditorOpen ? t('sidebar.hideKeyframes') : t('sidebar.showKeyframes')}
             data-tooltip-side="right"
-            aria-label={keyframeEditorOpen ? 'Hide keyframe editor' : 'Show keyframe editor'}
+            aria-label={keyframeEditorOpen ? t('sidebar.hideKeyframes') : t('sidebar.showKeyframes')}
           >
             <LineChart className="w-4 h-4" />
           </button>
@@ -460,27 +453,12 @@ export const MediaSidebar = memo(function MediaSidebar() {
 
           {/* Panel Header — sits with the tab content, below the keyframe editor */}
           <div
-            className="flex items-center justify-between px-3 border-b border-border flex-shrink-0"
+            className="flex items-center px-3 border-b border-border flex-shrink-0"
             style={{ height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderHeight }}
           >
             <span className="text-sm font-medium text-foreground">
               {categories.find((c) => c.id === activeTab)?.label}
             </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="shrink-0"
-              style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
-              onClick={toggleMediaFullColumn}
-              data-tooltip={mediaFullColumn ? 'Dock to preview' : 'Expand full column'}
-              data-tooltip-side="bottom"
-            >
-              {mediaFullColumn ? (
-                <ChevronUp className="w-3 h-3" />
-              ) : (
-                <ChevronDown className="w-3 h-3" />
-              )}
-            </Button>
           </div>
 
           {/* Media Tab - Full Media Library */}
@@ -772,11 +750,6 @@ export const MediaSidebar = memo(function MediaSidebar() {
           {/* Transitions Tab */}
           <div className={`min-h-0 flex-1 overflow-hidden ${activeTab === 'transitions' ? 'block' : 'hidden'}`}>
             <TransitionsPanel />
-          </div>
-
-          {/* AI Tab */}
-          <div className={`min-h-0 flex-1 overflow-hidden ${activeTab === 'ai' ? 'block' : 'hidden'}`}>
-            <AiPanel />
           </div>
           </div>
         </Activity>

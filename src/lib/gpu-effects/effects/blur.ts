@@ -2,7 +2,7 @@ import type { GpuEffectDefinition } from '../types';
 
 export const gaussianBlur: GpuEffectDefinition = {
   id: 'gpu-gaussian-blur',
-  name: 'Gaussian Blur',
+  name: '高斯模糊',
   category: 'blur',
   entryPoint: 'gaussianBlurFragment',
   uniformSize: 16,
@@ -44,7 +44,7 @@ fn gaussianBlurFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const boxBlur: GpuEffectDefinition = {
   id: 'gpu-box-blur',
-  name: 'Box Blur',
+  name: '方框模糊',
   category: 'blur',
   entryPoint: 'boxBlurFragment',
   uniformSize: 16,
@@ -79,7 +79,7 @@ fn boxBlurFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const motionBlur: GpuEffectDefinition = {
   id: 'gpu-motion-blur',
-  name: 'Motion Blur',
+  name: '运动模糊',
   category: 'blur',
   entryPoint: 'motionBlurFragment',
   uniformSize: 16,
@@ -118,7 +118,7 @@ fn motionBlurFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const radialBlur: GpuEffectDefinition = {
   id: 'gpu-radial-blur',
-  name: 'Radial Blur',
+  name: '径向模糊',
   category: 'blur',
   entryPoint: 'radialBlurFragment',
   uniformSize: 16,
@@ -162,7 +162,7 @@ fn radialBlurFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const zoomBlur: GpuEffectDefinition = {
   id: 'gpu-zoom-blur',
-  name: 'Zoom Blur',
+  name: '缩放模糊',
   category: 'blur',
   entryPoint: 'zoomBlurFragment',
   uniformSize: 16,

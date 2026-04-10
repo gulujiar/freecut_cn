@@ -2,6 +2,7 @@ import { Activity, memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Settings2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useItemsStore } from '@/features/editor/deps/timeline-store';
 import { useEditorStore } from '@/shared/state/editor';
 import { useSelectionStore } from '@/shared/state/selection';
@@ -54,7 +55,7 @@ function buildClipHeaderGroups(items: HeaderItem[]) {
   }));
 }
 
-function getClipHeader(items: HeaderItem[]) {
+function getClipHeader(items: HeaderItem[], t: (key: string, options?: any) => string) {
   const groups = buildClipHeaderGroups(items);
   const logicalCount = groups.length;
 
@@ -67,7 +68,7 @@ function getClipHeader(items: HeaderItem[]) {
     };
   }
 
-  const fallbackLabel = `${logicalCount} clip${logicalCount === 1 ? '' : 's'} selected`;
+  const fallbackLabel = t(logicalCount === 1 ? 'properties.oneClipSelected' : 'properties.multipleClipsSelected', { count: logicalCount });
 
   return {
     text: fallbackLabel,
@@ -81,6 +82,7 @@ function getClipHeader(items: HeaderItem[]) {
  * is selected, ClipPanel when clips are selected, CanvasPanel otherwise.
  */
 export const PropertiesSidebar = memo(function PropertiesSidebar() {
+  const { t } = useTranslation();
   const editorDensity = useSettingsStore((s) => s.editorDensity);
   const editorLayout = getEditorLayout(editorDensity);
   // Use granular selectors - Zustand v5 best practice
@@ -112,8 +114,8 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
 
   const hasClipSelection = selectedItemIds.length > 0;
   const clipHeader = useMemo(
-    () => getClipHeader(selectedItems),
-    [selectedItems]
+    () => getClipHeader(selectedItems, t),
+    [selectedItems, t]
   );
   const activeClipHeader = !selectedTransitionId && !selectedMarkerId ? clipHeader : null;
 
@@ -182,7 +184,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
                   className="shrink-0"
                   style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
                   onClick={togglePropertiesFullColumn}
-                  data-tooltip={propertiesFullColumn ? 'Dock to preview' : 'Expand full column'}
+                  data-tooltip={propertiesFullColumn ? t('properties.dockToPreview') : t('properties.expandFullColumn')}
                   data-tooltip-side="bottom"
                 >
                   {propertiesFullColumn ? (
@@ -193,7 +195,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
                 </Button>
                 <Settings2 className="w-3 h-3 shrink-0 text-muted-foreground" />
                 <h2 className="min-w-0 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                  <span className="shrink-0 uppercase tracking-wide">Properties</span>
+                  <span className="shrink-0 uppercase tracking-wide">{t('properties.title')}</span>
                   {activeClipHeader && (
                     <>
                       <span className="shrink-0">-</span>
@@ -243,7 +245,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
           onClick={toggleRightSidebar}
           className="absolute right-0 top-3 z-10 w-6 bg-secondary/50 hover:bg-secondary border border-border rounded-l-md flex items-center justify-center transition-all hover:w-7"
           style={{ height: EDITOR_LAYOUT_CSS_VALUES.sidebarRevealToggleHeight }}
-          data-tooltip="Show Properties Panel"
+          data-tooltip={t('properties.showPropertiesPanel')}
           data-tooltip-side="left"
         >
           <ChevronLeft className="w-3 h-3 text-muted-foreground" />

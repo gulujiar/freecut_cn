@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/shared/ui/cn';
+import { useTranslation } from 'react-i18next';
 import {
   HOTKEYS,
   HOTKEY_DESCRIPTIONS,
@@ -155,12 +156,12 @@ const HOTKEY_ITEM_BY_KEY = Object.fromEntries(
   )
 ) as Record<HotkeyKey, HotkeyEditorItem>;
 
-function getSlotLabel(item: HotkeyEditorItem, key: HotkeyKey): string {
+function getSlotLabel(t: any, item: HotkeyEditorItem, key: HotkeyKey): string {
   if (item.keys.length === 1) {
-    return 'Shortcut';
+    return t('hotkeys.shortcut');
   }
 
-  return item.keys[0] === key ? 'Primary shortcut' : 'Alternate shortcut';
+  return item.keys[0] === key ? t('hotkeys.primaryShortcut') : t('hotkeys.alternateShortcut');
 }
 
 function getBindingTokens(binding: string): string[] {
@@ -190,12 +191,14 @@ function HotkeyBindingPill({
   isListening = false,
   isCustom = false,
   onClick,
+  t,
 }: {
   binding: string;
   isActive?: boolean;
   isListening?: boolean;
   isCustom?: boolean;
   onClick?: () => void;
+  t: any;
 }) {
   const tokens = getBindingTokens(binding);
   const content = tokens.length > 0 ? (
@@ -216,13 +219,13 @@ function HotkeyBindingPill({
       ))}
       {isCustom ? (
         <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.18em] text-primary">
-          Custom
+          {t('hotkeys.custom')}
         </span>
       ) : null}
     </span>
   ) : (
     <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-      Unassigned
+      {t('hotkeys.unassigned')}
     </span>
   );
 
@@ -374,6 +377,7 @@ function KeyboardPreview({
 }
 
 export function HotkeyEditor() {
+  const { t } = useTranslation();
   const hotkeys = useResolvedHotkeys();
   const hotkeyOverrides = useSettingsStore((state) => state.hotkeyOverrides);
   const setHotkeyBinding = useSettingsStore((state) => state.setHotkeyBinding);
@@ -391,7 +395,7 @@ export function HotkeyEditor() {
   const [previewBinding, setPreviewBinding] = useState('');
 
   const selectedItem = HOTKEY_ITEM_BY_KEY[selectedKey];
-  const selectedSlotLabel = getSlotLabel(selectedItem, selectedKey);
+  const selectedSlotLabel = getSlotLabel(t, selectedItem, selectedKey);
   const isSelectedCustom = Boolean(hotkeyOverrides[selectedKey]);
   const customCount = Object.keys(hotkeyOverrides).length;
   const isCapturingSelectedKey = captureKey === selectedKey;
@@ -491,19 +495,20 @@ export function HotkeyEditor() {
           for (const token of splitHotkeyBinding(hotkeys[key])) {
             if (token === 'mod' || token === 'alt' || token === 'shift') continue;
             const existing = map.get(token);
+            const label = t(item.labelKey);
             if (existing) {
-              if (!existing.includes(item.label)) {
-                map.set(token, `${existing}, ${item.label}`);
+              if (!existing.includes(label)) {
+                map.set(token, `${existing}, ${label}`);
               }
             } else {
-              map.set(token, item.label);
+              map.set(token, label);
             }
           }
         }
       }
     }
     return map;
-  }, [activeLayer, hotkeys]);
+  }, [activeLayer, hotkeys, t]);
 
   const hoverTokens = useMemo(() => {
     if (hoveredKey) {
@@ -573,9 +578,9 @@ export function HotkeyEditor() {
       const exportDocument = createHotkeyExportDocument(hotkeyOverrides);
       const fileName = `freecut-hotkeys-${exportDocument.exportedAt.slice(0, 10)}.json`;
       downloadJsonFile(`${JSON.stringify(exportDocument, null, 2)}\n`, fileName);
-      toast.success(`Downloaded ${fileName}`);
+      toast.success(`${t('hotkeys.downloaded')} ${fileName}`);
     } catch {
-      toast.error('Failed to export keyboard shortcuts');
+      toast.error(t('hotkeys.failedExport'));
     }
   };
 
@@ -587,20 +592,20 @@ export function HotkeyEditor() {
       replaceHotkeyOverrides(importResult.overrides);
       stopCapture();
 
-      const messages = [`Imported ${importResult.importedCommandCount} commands`];
+      const messages = [`${t('hotkeys.imported')} ${importResult.importedCommandCount} ${t('hotkeys.commands')}`];
       if (importResult.remappedCommandCount > 0) {
-        messages.push(`remapped ${importResult.remappedCommandCount}`);
+        messages.push(`${t('hotkeys.remapped')} ${importResult.remappedCommandCount}`);
       }
       if (importResult.ignoredCommandCount > 0) {
-        messages.push(`ignored ${importResult.ignoredCommandCount}`);
+        messages.push(`${t('hotkeys.ignored')} ${importResult.ignoredCommandCount}`);
       }
       if (importResult.sourceVersion !== null) {
-        messages.push(`preset v${importResult.sourceVersion}`);
+        messages.push(`${t('hotkeys.preset')} v${importResult.sourceVersion}`);
       }
 
       toast.success(messages.join(' - '));
     } catch {
-      toast.error('Failed to import keyboard shortcut preset');
+      toast.error(t('hotkeys.failedImport'));
     }
   };
 
@@ -632,8 +637,8 @@ export function HotkeyEditor() {
       <div className="flex items-center gap-4 border-b border-white/6 px-5 py-2.5">
         <div className="flex flex-1 items-center gap-2.5">
           <Keyboard className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="text-sm font-medium text-foreground">Keyboard Shortcuts</span>
-          <span className="text-sm text-muted-foreground">&mdash; select a command, then record a new combo</span>
+          <span className="text-sm font-medium text-foreground">{t('hotkeys.title')}</span>
+          <span className="text-sm text-muted-foreground">&mdash; {t('hotkeys.subtitle')}</span>
         </div>
         <span className="shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium uppercase tracking-[0.18em] text-primary">
           {customCount} custom
@@ -678,7 +683,7 @@ export function HotkeyEditor() {
                     : 'text-muted-foreground hover:bg-white/5 hover:text-foreground/80'
                 )}
               >
-                {section.title}
+                {t(section.titleKey)}
               </button>
             ))}
           </div>
@@ -703,12 +708,12 @@ export function HotkeyEditor() {
                     Selected Command
                   </div>
                   <div className="mt-1 text-base font-semibold tracking-tight text-foreground">
-                    {selectedItem.label}
+                    {t(selectedItem.labelKey)}
                   </div>
                 </div>
                 {isSelectedCustom ? (
                   <span className="mt-1 shrink-0 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.18em] text-primary">
-                    Custom
+                    {t('hotkeys.custom')}
                   </span>
                 ) : null}
               </div>
@@ -735,6 +740,7 @@ export function HotkeyEditor() {
                 isListening={isCapturingSelectedKey}
                 isCustom={isSelectedCustom}
                 onClick={() => startCapture(selectedKey)}
+                t={t}
               />
             </div>
 
@@ -754,10 +760,10 @@ export function HotkeyEditor() {
                {isCapturingSelectedKey ? (
                  <>
                   <Button size="sm" className="w-full" onClick={saveCapture} disabled={!canSaveCapture}>
-                    Save
+                    {t('common.save')}
                   </Button>
                   <Button size="sm" variant="outline" className="w-full" onClick={stopCapture}>
-                    Cancel
+                    {t('common.cancel')}
                   </Button>
                 </>
               ) : (
@@ -772,7 +778,7 @@ export function HotkeyEditor() {
                     onClick={resetSelectedHotkey}
                     disabled={!isSelectedCustom}
                   >
-                    Reset
+                    {t('hotkeys.reset')}
                   </Button>
                 </>
               )}
@@ -786,7 +792,7 @@ export function HotkeyEditor() {
                 onClick={handleImportButtonClick}
               >
                 <Upload className="h-3.5 w-3.5" />
-                Import
+                {t('hotkeys.import')}
               </Button>
               <Button
                 size="sm"
@@ -795,7 +801,7 @@ export function HotkeyEditor() {
                 onClick={exportHotkeys}
               >
                 <Download className="h-3.5 w-3.5" />
-                Export
+                {t('hotkeys.export')}
               </Button>
             </div>
 
@@ -808,7 +814,7 @@ export function HotkeyEditor() {
                 {captureConflicts.length > 0 ? (
                   <div className="mt-2 flex items-center gap-1.5 text-xs text-destructive">
                     <AlertTriangle className="h-3.5 w-3.5" />
-                    {captureConflicts.map((key) => HOTKEY_DESCRIPTIONS[key]).join(', ')}
+                    {captureConflicts.map((key) => t(HOTKEY_ITEM_BY_KEY[key].labelKey)).join(', ')}
                   </div>
                 ) : null}
                 {pendingBrowserHotkey ? (
@@ -835,7 +841,7 @@ export function HotkeyEditor() {
                 disabled={customCount === 0}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
-                Reset All
+                {t('hotkeys.resetToDefault')}
               </Button>
             </div>
           </div>
@@ -846,15 +852,15 @@ export function HotkeyEditor() {
       <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/8 px-4 py-2 md:px-5">
         <div className="columns-[240px] gap-x-2 gap-y-0">
           {(activeLayer ? [activeLayer] : HOTKEY_EDITOR_SECTIONS).map((section) => (
-            <div key={section.title} className="break-inside-avoid">
+            <div key={section.titleKey} className="break-inside-avoid">
               {!activeLayer ? (
                 <div className="mb-0.5 mt-1.5 first:mt-0 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                  {section.title}
+                  {t(section.titleKey)}
                 </div>
               ) : null}
               {section.items.map((item) => (
                 <div
-                  key={`${section.title}-${item.label}`}
+                  key={`${section.titleKey}-${item.labelKey}`}
                   className={cn(
                     'mb-1 break-inside-avoid rounded border px-2 py-1 text-left transition-colors duration-150 ease-out motion-reduce:transition-none',
                     hoveredToken || hoveredKey
@@ -871,7 +877,7 @@ export function HotkeyEditor() {
                 >
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-left text-[12px] leading-5 text-foreground/92 cursor-pointer">
-                      {item.label}
+                      {t(item.labelKey)}
                     </span>
                     <div className="flex shrink-0 flex-col items-end gap-1">
                       {item.keys.map((key) => (
@@ -886,6 +892,7 @@ export function HotkeyEditor() {
                           isListening={captureKey === key}
                           isCustom={Boolean(hotkeyOverrides[key])}
                           onClick={() => startCapture(key)}
+                          t={t}
                         />
                       ))}
                     </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Type,
   Bold,
@@ -154,6 +155,7 @@ export function TextSection({
   showEffectSection = true,
   showAnimationSection = true,
 }: TextSectionProps) {
+  const { t } = useTranslation();
   const updateItem = useTimelineStore((s) => s.updateItem);
   const addKeyframes = useTimelineStore((s) => s.addKeyframes);
 

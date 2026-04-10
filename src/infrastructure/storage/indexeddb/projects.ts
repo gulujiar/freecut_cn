@@ -36,13 +36,19 @@ export async function getProject(id: string): Promise<Project | undefined> {
 export async function createProject(project: Project): Promise<Project> {
   try {
     const projectSize = new Blob([JSON.stringify(project)]).size;
-    const hasSpace = await hasEnoughSpace(projectSize);
+    let hasSpace = true;
 
-    if (!hasSpace) {
-      const { percentUsed } = await checkStorageQuota();
-      throw new Error(
-        `Insufficient storage space. ${percentUsed.toFixed(1)}% of quota used.`
-      );
+    try {
+      hasSpace = await hasEnoughSpace(projectSize);
+
+      if (!hasSpace) {
+        const { percentUsed } = await checkStorageQuota();
+        logger.warn(
+          `Insufficient storage space. ${percentUsed.toFixed(1)}% of quota used. Proceeding anyway.`
+        );
+      }
+    } catch (spaceCheckError) {
+      logger.warn('Failed to check storage space, proceeding anyway:', spaceCheckError);
     }
 
     const db = await getDB();

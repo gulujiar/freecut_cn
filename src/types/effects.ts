@@ -25,7 +25,7 @@ interface EffectPreset {
 export const EFFECT_PRESETS: EffectPreset[] = [
   {
     id: 'vintage',
-    name: 'Vintage',
+    name: '复古',
     effects: [
       { type: 'gpu-effect', gpuEffectType: 'gpu-sepia', params: { amount: 0.4 } },
       { type: 'gpu-effect', gpuEffectType: 'gpu-contrast', params: { amount: 1.1 } },
@@ -34,7 +34,7 @@ export const EFFECT_PRESETS: EffectPreset[] = [
   },
   {
     id: 'noir',
-    name: 'Noir',
+    name: '黑白',
     effects: [
       { type: 'gpu-effect', gpuEffectType: 'gpu-grayscale', params: { amount: 1 } },
       { type: 'gpu-effect', gpuEffectType: 'gpu-contrast', params: { amount: 1.3 } },
@@ -42,7 +42,7 @@ export const EFFECT_PRESETS: EffectPreset[] = [
   },
   {
     id: 'cold',
-    name: 'Cold',
+    name: '冷色调',
     effects: [
       { type: 'gpu-effect', gpuEffectType: 'gpu-hue-shift', params: { shift: 0.5 } },
       { type: 'gpu-effect', gpuEffectType: 'gpu-saturation', params: { amount: 0.8 } },
@@ -50,7 +50,7 @@ export const EFFECT_PRESETS: EffectPreset[] = [
   },
   {
     id: 'warm',
-    name: 'Warm',
+    name: '暖色调',
     effects: [
       { type: 'gpu-effect', gpuEffectType: 'gpu-sepia', params: { amount: 0.2 } },
       { type: 'gpu-effect', gpuEffectType: 'gpu-saturation', params: { amount: 1.2 } },
@@ -58,7 +58,7 @@ export const EFFECT_PRESETS: EffectPreset[] = [
   },
   {
     id: 'dramatic',
-    name: 'Dramatic',
+    name: '戏剧效果',
     effects: [
       { type: 'gpu-effect', gpuEffectType: 'gpu-contrast', params: { amount: 1.5 } },
       { type: 'gpu-effect', gpuEffectType: 'gpu-saturation', params: { amount: 1.3 } },
@@ -66,7 +66,7 @@ export const EFFECT_PRESETS: EffectPreset[] = [
   },
   {
     id: 'faded',
-    name: 'Faded',
+    name: '褪色',
     effects: [
       { type: 'gpu-effect', gpuEffectType: 'gpu-contrast', params: { amount: 0.8 } },
       { type: 'gpu-effect', gpuEffectType: 'gpu-brightness', params: { amount: 0.1 } },

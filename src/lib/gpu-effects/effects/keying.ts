@@ -1,8 +1,29 @@
 import type { GpuEffectDefinition } from '../types';
 
+function parseHexColor(color: string): { r: number; g: number; b: number } {
+  if (!color || !color.startsWith('#')) {
+    return { r: 0, g: 1, b: 0 };
+  }
+  const hex = color.slice(1);
+  if (hex.length === 6) {
+    return {
+      r: parseInt(hex.slice(0, 2), 16) / 255,
+      g: parseInt(hex.slice(2, 4), 16) / 255,
+      b: parseInt(hex.slice(4, 6), 16) / 255,
+    };
+  } else if (hex.length === 3) {
+    return {
+      r: parseInt(hex[0] + hex[0], 16) / 255,
+      g: parseInt(hex[1] + hex[1], 16) / 255,
+      b: parseInt(hex[2] + hex[2], 16) / 255,
+    };
+  }
+  return { r: 0, g: 1, b: 0 };
+}
+
 export const chromaKey: GpuEffectDefinition = {
   id: 'gpu-chroma-key',
-  name: 'Chroma Key',
+  name: '色度抠像',
   category: 'keying',
   entryPoint: 'chromaKeyFragment',
   uniformSize: 32,
@@ -46,27 +67,23 @@ fn chromaKeyFragment(input: VertexOutput) -> @location(0) vec4f {
       finalColor.g += spillAmount * 0.5;
     }
   }
-  return vec4f(finalColor, color.a * alpha);
+  let finalAlpha = color.a * alpha;
+  return vec4f(finalColor * finalAlpha, finalAlpha);
 }`,
   params: {
     keyColor: {
-      type: 'select',
+      type: 'color',
       label: 'Key Color',
-      default: 'green',
-      options: [
-        { value: 'green', label: 'Green Screen' },
-        { value: 'blue', label: 'Blue Screen' },
-      ],
+      default: '#00ff00',
     },
     tolerance: { type: 'number', label: 'Tolerance', default: 0.2, min: 0, max: 1, step: 0.01, animatable: true },
     softness: { type: 'number', label: 'Edge Softness', default: 0.1, min: 0, max: 0.5, step: 0.01, animatable: true },
     spillSuppression: { type: 'number', label: 'Spill Suppression', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true },
   },
   packUniforms: (p) => {
-    let keyR = 0, keyG = 1, keyB = 0;
-    if ((p.keyColor as string) === 'blue') { keyR = 0; keyG = 0; keyB = 1; }
+    const color = parseHexColor(p.keyColor as string ?? '#00ff00');
     return new Float32Array([
-      keyR, keyG, keyB, p.tolerance as number ?? 0.2,
+      color.r, color.g, color.b, p.tolerance as number ?? 0.2,
       p.softness as number ?? 0.1, p.spillSuppression as number ?? 0.5, 0, 0,
     ]);
   },

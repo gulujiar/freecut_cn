@@ -1,4 +1,5 @@
 import { useCallback, useMemo, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Droplet, RotateCcw } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
@@ -42,19 +43,15 @@ interface FillSectionProps {
 
 type MixedValue = number | 'mixed';
 
-/**
- * Composite section - opacity, blend mode, and corner radius.
- * Memoized to prevent re-renders when props haven't changed.
- */
 export const FillSection = memo(function FillSection({
   items,
   canvas,
   onTransformChange,
 }: FillSectionProps) {
+  const { t } = useTranslation();
   const itemIds = useMemo(() => items.map((item) => item.id), [items]);
   const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
 
-  // Get current playhead frame for keyframe animation (throttled to reduce re-renders)
   const currentFrame = useThrottledFrame();
 
   const itemKeyframes = useKeyframesStore(
@@ -73,15 +70,11 @@ export const FillSection = memo(function FillSection({
     return map;
   }, [itemIds, itemKeyframes]);
 
-  // Item update for non-transform properties (blend mode)
   const updateItem = useTimelineStore((s) => s.updateItem);
 
-  // Gizmo store for live preview
   const setTransformPreview = useGizmoStore((s) => s.setTransformPreview);
   const clearPreview = useGizmoStore((s) => s.clearPreview);
 
-  // Get current values with keyframe animation applied
-  // Opacity is 0-1, display as 0-100%
   const { opacityRaw, cornerRadius } = useMemo(() => {
     if (items.length === 0) {
       return { opacityRaw: 1 as MixedValue, cornerRadius: 0 as MixedValue };
@@ -91,7 +84,6 @@ export const FillSection = memo(function FillSection({
         const sourceDimensions = getSourceDimensions(item);
         const baseResolved = resolveTransform(item, canvas, sourceDimensions);
 
-        // Apply keyframe animation if item has keyframes
         const itemKeyframes = keyframesByItemId.get(item.id) ?? undefined;
         if (itemKeyframes) {
           const relativeFrame = currentFrame - item.from;
@@ -115,10 +107,8 @@ export const FillSection = memo(function FillSection({
 
   const opacity = opacityRaw === 'mixed' ? 'mixed' : Math.round(opacityRaw * 100);
 
-  // Get batched keyframe action for auto-keyframing
   const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations);
 
-  // Helper: Check if opacity has keyframes and auto-keyframe on value change
   const autoKeyframeOpacity = useCallback(
     (itemId: string, value: number): AutoKeyframeOperation | null => {
       const item = itemsById.get(itemId);
@@ -130,7 +120,6 @@ export const FillSection = memo(function FillSection({
     [currentFrame, itemsById, keyframesByItemId]
   );
 
-  // Helper: Check if cornerRadius has keyframes and auto-keyframe on value change
   const autoKeyframeCornerRadius = useCallback(
     (itemId: string, value: number): AutoKeyframeOperation | null => {
       const item = itemsById.get(itemId);
@@ -142,7 +131,6 @@ export const FillSection = memo(function FillSection({
     [currentFrame, itemsById, keyframesByItemId]
   );
 
-  // Live preview for opacity (during drag)
   const handleOpacityLiveChange = useCallback(
     (value: number) => {
       const previews: Record<string, { opacity: number }> = {};
@@ -154,10 +142,9 @@ export const FillSection = memo(function FillSection({
     [items, setTransformPreview]
   );
 
-  // Commit opacity (on mouse up, with auto-keyframe support)
   const handleOpacityChange = useCallback(
     (value: number) => {
-      const opacityValue = value / 100; // Convert from 0-100 to 0-1
+      const opacityValue = value / 100;
 
       const autoOps: AutoKeyframeOperation[] = [];
       const fallbackItemIds: string[] = [];
@@ -180,7 +167,6 @@ export const FillSection = memo(function FillSection({
     [itemIds, onTransformChange, clearPreview, autoKeyframeOpacity, applyAutoKeyframeOperations]
   );
 
-  // Live preview for corner radius (during drag)
   const handleCornerRadiusLiveChange = useCallback(
     (value: number) => {
       const previews: Record<string, { cornerRadius: number }> = {};
@@ -192,7 +178,6 @@ export const FillSection = memo(function FillSection({
     [items, setTransformPreview]
   );
 
-  // Commit corner radius (on mouse up, with auto-keyframe support)
   const handleCornerRadiusChange = useCallback(
     (value: number) => {
       const autoOps: AutoKeyframeOperation[] = [];
@@ -216,7 +201,6 @@ export const FillSection = memo(function FillSection({
     [itemIds, onTransformChange, clearPreview, autoKeyframeCornerRadius, applyAutoKeyframeOperations]
   );
 
-  // Get current blend mode (shared across selected items)
   const blendMode = useMemo(() => {
     if (items.length === 0) return 'normal' as BlendMode;
     const first = items[0]!.blendMode ?? 'normal';
@@ -224,7 +208,6 @@ export const FillSection = memo(function FillSection({
     return allSame ? first : ('mixed' as string);
   }, [items]);
 
-  // Handle blend mode change
   const handleBlendModeChange = useCallback(
     (value: string) => {
       for (const id of itemIds) {
@@ -234,7 +217,6 @@ export const FillSection = memo(function FillSection({
     [itemIds, updateItem]
   );
 
-  // Reset opacity to 100%
   const handleResetOpacity = useCallback(() => {
     const tolerance = 0.01;
     const needsUpdate = items.some((item) => {
@@ -247,7 +229,6 @@ export const FillSection = memo(function FillSection({
     }
   }, [items, itemIds, onTransformChange, canvas]);
 
-  // Reset corner radius to 0
   const handleResetCornerRadius = useCallback(() => {
     const tolerance = 0.5;
     const needsUpdate = items.some((item) => {
@@ -261,9 +242,8 @@ export const FillSection = memo(function FillSection({
   }, [items, itemIds, onTransformChange, canvas]);
 
   return (
-    <PropertySection title="Composite" icon={Droplet} defaultOpen={true}>
-      {/* Opacity */}
-      <PropertyRow label="Opacity">
+    <PropertySection title={t('properties.composite')} icon={Droplet} defaultOpen={true}>
+      <PropertyRow label={t('properties.opacity')}>
         <div className="flex items-center gap-1 w-full">
           <SliderInput
             value={opacity}
@@ -285,21 +265,20 @@ export const FillSection = memo(function FillSection({
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetOpacity}
-            title="Reset to 100%"
+            title={t('properties.resetTo100Percent')}
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
         </div>
       </PropertyRow>
 
-      {/* Blend Mode */}
-      <PropertyRow label="Blend">
+      <PropertyRow label={t('properties.blend')}>
         <Select
           value={blendMode === 'mixed' ? undefined : blendMode}
           onValueChange={handleBlendModeChange}
         >
           <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-            <SelectValue placeholder={blendMode === 'mixed' ? 'Mixed' : 'Normal'} />
+            <SelectValue placeholder={blendMode === 'mixed' ? t('properties.mixed') : t('properties.normal')} />
           </SelectTrigger>
           <SelectContent>
             {BLEND_MODE_GROUPS.map((group) => (
@@ -316,8 +295,7 @@ export const FillSection = memo(function FillSection({
         </Select>
       </PropertyRow>
 
-      {/* Corner Radius */}
-      <PropertyRow label="Radius">
+      <PropertyRow label={t('properties.radius')}>
         <div className="flex items-center gap-1 w-full">
           <NumberInput
             value={cornerRadius}
@@ -339,7 +317,7 @@ export const FillSection = memo(function FillSection({
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetCornerRadius}
-            title="Reset to 0"
+            title={t('properties.resetTo0')}
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>

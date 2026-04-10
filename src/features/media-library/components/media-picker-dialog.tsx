@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Video, FileAudio, Image as ImageIcon, Search, Loader2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { MediaMetadata } from '@/types/storage';
 import { useMediaLibraryStore } from '../stores/media-library-store';
 import { mediaLibraryService } from '../services/media-library-service';
@@ -25,7 +26,7 @@ const typeIcons: Record<string, typeof Video> = {
   video: Video,
   audio: FileAudio,
   image: ImageIcon,
-  unknown: Video, // Fallback
+  unknown: Video,
 };
 
 function MediaPickerItem({
@@ -61,7 +62,6 @@ function MediaPickerItem({
       onClick={onSelect}
       className="flex w-full items-start gap-3 rounded-lg border border-transparent p-2 text-left transition-colors hover:border-border hover:bg-secondary/50"
     >
-      {/* Thumbnail */}
       <div className="relative w-12 h-12 rounded overflow-hidden bg-secondary flex-shrink-0">
         {thumbnailUrl ? (
           <img
@@ -76,7 +76,6 @@ function MediaPickerItem({
         )}
       </div>
 
-      {/* Info */}
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium leading-snug break-words">{media.fileName}</p>
         <p className="text-xs text-muted-foreground">
@@ -86,7 +85,6 @@ function MediaPickerItem({
         </p>
       </div>
 
-      {/* Type icon */}
       <IconComponent className="w-4 h-4 text-muted-foreground flex-shrink-0" />
     </button>
   );
@@ -97,30 +95,27 @@ export function MediaPickerDialog({
   onClose,
   onSelect,
   filterType,
-  title = 'Select Media',
+  title,
 }: MediaPickerDialogProps) {
+  const { t } = useTranslation();
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
   const isLoading = useMediaLibraryStore((s) => s.isLoading);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Reset search when dialog opens
   useEffect(() => {
     if (open) {
       setSearchQuery('');
     }
   }, [open]);
 
-  // Filter media items
   const filteredItems = useMemo(() => {
     let items = mediaItems;
 
-    // Filter by type if specified
     if (filterType) {
       const mimePrefix = `${filterType}/`;
       items = items.filter((m) => m.mimeType.startsWith(mimePrefix));
     }
 
-    // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       items = items.filter((m) => m.fileName.toLowerCase().includes(query));
@@ -138,25 +133,27 @@ export function MediaPickerDialog({
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-h-[70vh] w-[min(92vw,960px)] max-w-[960px]">
         <DialogHeader>
-          <DialogTitle className="pr-8 leading-snug break-words">{title}</DialogTitle>
+          <DialogTitle className="pr-8 leading-snug break-words">
+            {title || t('dialogs.mediaPicker.title')}
+          </DialogTitle>
           <DialogDescription>
-            Choose a {filterType || 'media'} file from your library.
+            {filterType
+              ? t('dialogs.mediaPicker.description', { type: filterType })
+              : t('dialogs.mediaPicker.descriptionGeneric')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Search input */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
-              placeholder="Search media..."
+              placeholder={t('dialogs.mediaPicker.searchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
             />
           </div>
 
-          {/* Media list */}
           <div className="max-h-[400px] overflow-y-auto space-y-1 pr-2">
             {isLoading ? (
               <div className="flex items-center justify-center py-8">
@@ -165,10 +162,10 @@ export function MediaPickerDialog({
             ) : filteredItems.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 {searchQuery
-                  ? 'No media found matching your search.'
+                  ? t('dialogs.mediaPicker.noMediaFound')
                   : filterType
-                  ? `No ${filterType} files in library.`
-                  : 'No media in library.'}
+                  ? t('dialogs.mediaPicker.noTypeInLibrary', { type: filterType })
+                  : t('dialogs.mediaPicker.noMediaInLibrary')}
               </div>
             ) : (
               filteredItems.map((media) => (

@@ -37,12 +37,12 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import { useSelectionStore } from '@/shared/state/selection';
 import type { AudioItem } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
-import {
-  KITTEN_TTS_MODEL_OPTIONS,
-  KITTEN_TTS_VOICE_OPTIONS,
-  kittenTtsService,
-  type KittenTtsVoice,
-} from '../services/kitten-tts-service';
+// import {
+//   KITTEN_TTS_MODEL_OPTIONS,
+//   KITTEN_TTS_VOICE_OPTIONS,
+//   kittenTtsService,
+//   type KittenTtsVoice,
+// } from '../services/kitten-tts-service';
 
 const DEFAULT_PROMPT = 'Welcome to free cut. This voice was generated locally in the browser with WebGPU.';
 

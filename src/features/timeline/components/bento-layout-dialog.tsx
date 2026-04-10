@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/shared/ui/cn';
 import { X } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useBentoLayoutDialogStore } from './bento-layout-dialog-store';
 import { useBentoPresetsStore } from '../stores/bento-presets-store';
 import { useProjectStore } from '@/features/timeline/deps/projects';
@@ -22,26 +23,12 @@ import { buildTransitionIndexes } from '../utils/transition-indexes';
 import type { LayoutPresetType, LayoutConfig, BentoLayoutItem } from '../utils/bento-layout';
 import type { TimelineItem } from '@/types/timeline';
 
-// â”€â”€ Built-in presets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
 interface BuiltInPreset {
   type: LayoutPresetType;
   label: string;
   cols?: number;
   rows?: number;
 }
-
-const BUILT_IN_PRESETS: BuiltInPreset[] = [
-  { type: 'auto', label: 'Auto' },
-  { type: 'row', label: 'Side by Side' },
-  { type: 'column', label: 'Stacked' },
-  { type: 'pip', label: 'PiP' },
-  { type: 'focus-sidebar', label: 'Focus+Sidebar' },
-  { type: 'grid', label: '2\u00D72', cols: 2, rows: 2 },
-  { type: 'grid', label: '3\u00D73', cols: 3, rows: 3 },
-];
-
-// â”€â”€ Item type colors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const ITEM_TYPE_COLORS: Record<string, { bg: string; border: string }> = {
   video: { bg: 'bg-blue-500/60', border: 'border-blue-400/80' },
@@ -56,8 +43,6 @@ const DEFAULT_COLOR = { bg: 'bg-muted-foreground/40', border: 'border-muted-fore
 function getItemColor(type: string) {
   return ITEM_TYPE_COLORS[type] ?? DEFAULT_COLOR;
 }
-
-// â”€â”€ Number input helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function NumberInput({
   label,
@@ -86,8 +71,6 @@ function NumberInput({
     </div>
   );
 }
-
-// â”€â”€ Layout canvas item â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface CanvasItemRect {
   id: string;
@@ -148,8 +131,6 @@ function CanvasItem({
   );
 }
 
-// â”€â”€ Layout canvas â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
 function LayoutCanvas({
   chainOrder,
   onSwap,
@@ -157,19 +138,19 @@ function LayoutCanvas({
   canvasHeight,
   config,
   itemsLookup,
+  noItemsText,
 }: {
-  /** Ordered chains â€” each chain is a group of item IDs sharing one layout cell */
   chainOrder: string[][];
   onSwap: (fromIndex: number, toIndex: number) => void;
   canvasWidth: number;
   canvasHeight: number;
   config: LayoutConfig;
   itemsLookup: Map<string, TimelineItem>;
+  noItemsText: string;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(0);
 
-  // Measure container width
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -182,7 +163,6 @@ function LayoutCanvas({
     return () => observer.disconnect();
   }, []);
 
-  // Compute display scale (guard against zero/missing canvas dimensions)
   const safeCanvasWidth = canvasWidth > 0 ? canvasWidth : 1920;
   const safeCanvasHeight = canvasHeight > 0 ? canvasHeight : 1080;
   const aspectRatio = safeCanvasWidth / safeCanvasHeight;
@@ -190,7 +170,6 @@ function LayoutCanvas({
   const displayHeight = containerWidth > 0 ? displayWidth / aspectRatio : 200;
   const scale = containerWidth > 0 ? displayWidth / safeCanvasWidth : 1;
 
-  // Build one layout item per chain (representative = first item in chain)
   const layoutItems: BentoLayoutItem[] = useMemo(() => {
     return chainOrder.map((chain) => {
       const repId = chain[0]!;
@@ -206,7 +185,6 @@ function LayoutCanvas({
     return computeLayout(layoutItems, safeCanvasWidth, safeCanvasHeight, config);
   }, [layoutItems, safeCanvasWidth, safeCanvasHeight, config]);
 
-  // Convert center-relative coords to absolute top-left, then scale â€” one rect per chain
   const canvasRects: CanvasItemRect[] = useMemo(() => {
     const cx = safeCanvasWidth / 2;
     const cy = safeCanvasHeight / 2;
@@ -218,10 +196,9 @@ function LayoutCanvas({
       const h = t?.height ?? safeCanvasHeight;
       const absLeft = cx + (t?.x ?? 0) - w / 2;
       const absTop = cy + (t?.y ?? 0) - h / 2;
-      // Build label: show all item labels in the chain
       const label = chain.length === 1
         ? (item?.label ?? repId.slice(0, 6))
-        : chain.map((id) => itemsLookup.get(id)?.label ?? id.slice(0, 4)).join(' \u2192 ');
+        : chain.map((id) => itemsLookup.get(id)?.label ?? id.slice(0, 4)).join(' → ');
       return {
         id: repId,
         label,
@@ -234,13 +211,11 @@ function LayoutCanvas({
     });
   }, [chainOrder, transformsMap, itemsLookup, safeCanvasWidth, safeCanvasHeight, scale]);
 
-  // Drag state
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number } | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
 
-  // Hit-test: find which canvas rect the cursor is over
   const hitTest = useCallback(
     (clientX: number, clientY: number): number | null => {
       const el = containerRef.current;
@@ -259,7 +234,6 @@ function LayoutCanvas({
     [canvasRects],
   );
 
-  // Window-level mouse handlers for drag
   useEffect(() => {
     if (dragIndex === null) return;
 
@@ -319,22 +293,19 @@ function LayoutCanvas({
       ))}
       {canvasRects.length === 0 && (
         <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-          No items to arrange
+          {noItemsText}
         </div>
       )}
     </div>
   );
 }
 
-// â”€â”€ Preset strip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
 type SelectedPreset =
   | { kind: 'builtin'; index: number }
   | { kind: 'custom'; id: string };
 
-// â”€â”€ Main dialog â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
 export function BentoLayoutDialog() {
+  const { t } = useTranslation();
   const isOpen = useBentoLayoutDialogStore((s) => s.isOpen);
   const itemIds = useBentoLayoutDialogStore((s) => s.itemIds);
   const close = useBentoLayoutDialogStore((s) => s.close);
@@ -349,17 +320,23 @@ export function BentoLayoutDialog() {
   const [selected, setSelected] = useState<SelectedPreset>({ kind: 'builtin', index: 0 });
   const [gap, setGap] = useState(0);
   const [padding, setPadding] = useState(0);
-  /** Chain order â€” each entry is a chain (group of transition-connected item IDs) */
   const [chainOrder, setChainOrder] = useState<string[][]>([]);
 
-  // Save preset inline state
   const [isSaving, setIsSaving] = useState(false);
   const [presetName, setPresetName] = useState('');
 
-  // Build transition chains when dialog opens
   const transitions = useTransitionsStore((s) => s.transitions);
 
-  // Sync chainOrder when dialog opens or itemIds change
+  const BUILT_IN_PRESETS: BuiltInPreset[] = [
+    { type: 'auto', label: t('dialogs.bentoLayout.presets.auto') },
+    { type: 'row', label: t('dialogs.bentoLayout.presets.sideBySide') },
+    { type: 'column', label: t('dialogs.bentoLayout.presets.stacked') },
+    { type: 'pip', label: t('dialogs.bentoLayout.presets.pip') },
+    { type: 'focus-sidebar', label: t('dialogs.bentoLayout.presets.focusSidebar') },
+    { type: 'grid', label: t('dialogs.bentoLayout.presets.2x2'), cols: 2, rows: 2 },
+    { type: 'grid', label: t('dialogs.bentoLayout.presets.3x3'), cols: 3, rows: 3 },
+  ];
+
   useEffect(() => {
     if (isOpen && itemIds.length > 0) {
       const { transitionsByClipId } = buildTransitionIndexes(transitions);
@@ -373,7 +350,6 @@ export function BentoLayoutDialog() {
     }
   }, [isOpen, itemIds, transitions]);
 
-  // Look up items from store (reactive)
   const items = useItemsStore((state) => state.items);
   const itemsLookup = useMemo(() => {
     const map = new Map<string, TimelineItem>();
@@ -410,7 +386,7 @@ export function BentoLayoutDialog() {
       gap,
       padding,
     };
-  }, [selected, customPresets, gap, padding]);
+  }, [selected, customPresets, gap, padding, BUILT_IN_PRESETS]);
 
   const config = useMemo(() => resolveConfig(), [resolveConfig]);
 
@@ -428,7 +404,6 @@ export function BentoLayoutDialog() {
     const flatIds = chainOrder.flat();
     if (flatIds.length < 2) return;
     const cfg = resolveConfig();
-    // Pass user's drag-swap ordered chains to preserve layout order
     applyBentoLayout(flatIds, canvasWidth, canvasHeight, cfg, chainOrder);
     close();
   }, [chainOrder, canvasWidth, canvasHeight, resolveConfig, close]);
@@ -456,11 +431,9 @@ export function BentoLayoutDialog() {
   const handleSelectPreset = useCallback(
     (sel: SelectedPreset) => {
       setSelected(sel);
-      // Reset chain order to original when switching presets
       const { transitionsByClipId } = buildTransitionIndexes(transitions);
       setChainOrder(buildTransitionChains(itemIds, transitionsByClipId));
 
-      // For custom presets, also apply their gap/padding
       if (sel.kind === 'custom') {
         const preset = customPresets.find((p) => p.id === sel.id);
         if (preset) {
@@ -487,13 +460,12 @@ export function BentoLayoutDialog() {
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Bento Layout</DialogTitle>
+          <DialogTitle>{t('dialogs.bentoLayout.title')}</DialogTitle>
           <DialogDescription>
-            Arrange {itemCount} selected clip{itemCount !== 1 ? 's' : ''} â€” drag items to swap positions
+            {t('dialogs.bentoLayout.description', { count: itemCount })}
           </DialogDescription>
         </DialogHeader>
 
-        {/* Preset strip */}
         <div className="flex flex-wrap gap-1.5">
           {BUILT_IN_PRESETS.map((preset, idx) => {
             const isSelected = selected.kind === 'builtin' && selected.index === idx;
@@ -520,7 +492,7 @@ export function BentoLayoutDialog() {
                 <button
                   onClick={() => handleSelectPreset({ kind: 'custom', id: preset.id })}
                   className={cn(
-                    'px-2.5 py-1 rounded-md text-xs font-medium transition-colors',
+                    'px-2.5 py-1 rounded-md text-xs font-medium transition-colors pr-6',
                     'hover:bg-accent',
                     isSelected
                       ? 'ring-2 ring-primary bg-accent text-accent-foreground'
@@ -530,88 +502,82 @@ export function BentoLayoutDialog() {
                   {preset.name}
                 </button>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    removePreset(preset.id);
-                    if (isSelected) {
-                      setSelected({ kind: 'builtin', index: 0 });
-                    }
-                  }}
-                  className="absolute -top-1.5 -right-1.5 hidden group-hover:flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-destructive-foreground"
+                  onClick={() => removePreset(preset.id)}
+                  className="absolute right-1 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
                 >
-                  <X className="h-2.5 w-2.5" />
+                  <X className="h-3 w-3" />
                 </button>
               </div>
             );
           })}
         </div>
 
-        {/* Interactive canvas */}
-        <LayoutCanvas
-          chainOrder={chainOrder}
-          onSwap={handleSwap}
-          canvasWidth={canvasWidth}
-          canvasHeight={canvasHeight}
-          config={config}
-          itemsLookup={itemsLookup}
-        />
+        <div className="space-y-4">
+          <LayoutCanvas
+            chainOrder={chainOrder}
+            onSwap={handleSwap}
+            canvasWidth={canvasWidth}
+            canvasHeight={canvasHeight}
+            config={config}
+            itemsLookup={itemsLookup}
+            noItemsText={t('dialogs.bentoLayout.noItems')}
+          />
 
-        {/* Options bar */}
-        <div className="flex items-center gap-4">
-          <NumberInput label="Gap" value={gap} onChange={setGap} min={0} max={200} />
-          <NumberInput label="Padding" value={padding} onChange={setPadding} min={0} max={200} />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <NumberInput
+                label={t('dialogs.bentoLayout.gap')}
+                value={gap}
+                onChange={setGap}
+                min={0}
+                max={200}
+              />
+              <NumberInput
+                label={t('dialogs.bentoLayout.padding')}
+                value={padding}
+                onChange={setPadding}
+                min={0}
+                max={200}
+              />
+            </div>
+          </div>
         </div>
 
-        {/* Save preset inline */}
-        {isSaving ? (
-          <div className="flex items-center gap-2">
-            <Input
-              placeholder="Preset name"
-              value={presetName}
-              onChange={(e) => setPresetName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSavePreset();
-                if (e.key === 'Escape') {
-                  setIsSaving(false);
-                  setPresetName('');
-                }
-              }}
-              className="h-8 text-sm flex-1"
-              autoFocus
-            />
-            <Button size="sm" variant="secondary" onClick={handleSavePreset} disabled={!presetName.trim()}>
-              Save
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setIsSaving(false);
-                setPresetName('');
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        ) : null}
-
-        <DialogFooter className="flex-row justify-between sm:justify-between">
+        <DialogFooter className="gap-2 sm:gap-0">
           {!isSaving ? (
-            <Button variant="secondary" size="sm" onClick={() => setIsSaving(true)}>
-              Save as Preset
-            </Button>
+            <>
+              <Button variant="secondary" size="sm" onClick={() => setIsSaving(true)}>
+                {t('dialogs.bentoLayout.savePreset')}
+              </Button>
+            </>
           ) : (
-            <div />
+            <div className="flex items-center gap-2 flex-1">
+              <Input
+                type="text"
+                placeholder={t('dialogs.bentoLayout.presetName')}
+                value={presetName}
+                onChange={(e) => setPresetName(e.target.value)}
+                className="h-7 text-xs"
+                autoFocus
+              />
+              <Button variant="ghost" size="sm" onClick={() => setIsSaving(false)}>
+                {t('dialogs.bentoLayout.cancel')}
+              </Button>
+              <Button size="sm" onClick={handleSavePreset}>
+                {t('dialogs.bentoLayout.save')}
+              </Button>
+            </div>
           )}
           <div className="flex gap-2">
             <Button variant="ghost" onClick={close}>
-              Cancel
+              {t('dialogs.bentoLayout.cancel')}
             </Button>
-            <Button onClick={handleApply}>Apply</Button>
+            <Button onClick={handleApply}>
+              {t('dialogs.bentoLayout.apply')}
+            </Button>
           </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
 }
-

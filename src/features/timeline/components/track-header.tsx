@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import {
   ContextMenu,
@@ -71,6 +72,7 @@ export const TrackHeader = memo(function TrackHeader({
   onDeleteTrack,
   onDeleteEmptyTracks,
 }: TrackHeaderProps) {
+  const { t } = useTranslation();
   const itemCount = useItemsStore((s) => s.itemsByTrackId[track.id]?.length ?? 0);
   const trackKind = getTrackKind(track);
   const isTrackDisabled = trackKind === 'audio'
@@ -81,7 +83,7 @@ export const TrackHeader = memo(function TrackHeader({
 
   // Use track drag hook (visuals handled centrally by timeline.tsx via DOM)
   const { handleDragStart } = useTrackDrag(track);
-  const itemCountLabel = `${itemCount} ${itemCount === 1 ? 'Clip' : 'Clips'}`;
+  const itemCountLabel = `${itemCount} ${itemCount === 1 ? t('track.clip') : t('track.clips')}`;
 
   return (
     <ContextMenu>
@@ -120,7 +122,7 @@ export const TrackHeader = memo(function TrackHeader({
               }}
               onMouseDown={(e) => e.stopPropagation()}
               aria-label={isTrackDisabled ? 'Enable track' : 'Disable track'}
-              data-tooltip={isTrackDisabled ? 'Enable track' : 'Disable track'}
+              data-tooltip={isTrackDisabled ? t('track.enableTrack') : t('track.disableTrack')}
             >
               {isTrackDisabled ? (
                 <PowerOff className="w-3 h-3 text-primary" />
@@ -141,7 +143,7 @@ export const TrackHeader = memo(function TrackHeader({
               }}
               onMouseDown={(e) => e.stopPropagation()}
               aria-label={track.solo ? 'Unsolo track' : 'Solo track'}
-              data-tooltip={track.solo ? 'Unsolo track' : 'Solo track'}
+              data-tooltip={track.solo ? t('track.unsoloTrack') : t('track.soloTrack')}
             >
               <Radio
                 className={`w-3 h-3 ${track.solo ? 'text-primary' : ''}`}
@@ -160,7 +162,7 @@ export const TrackHeader = memo(function TrackHeader({
               }}
               onMouseDown={(e) => e.stopPropagation()}
               aria-label={track.locked ? 'Unlock track' : 'Lock track'}
-              data-tooltip={track.locked ? 'Unlock track' : 'Lock track'}
+              data-tooltip={track.locked ? t('track.unlockTrack') : t('track.lockTrack')}
             >
               <Lock
                 className={`w-3 h-3 ${track.locked ? 'text-primary' : 'opacity-70'}`}
@@ -178,7 +180,7 @@ export const TrackHeader = memo(function TrackHeader({
               }}
               onMouseDown={(e) => e.stopPropagation()}
               aria-label="Close all gaps"
-              data-tooltip="Close all gaps"
+              data-tooltip={t('track.closeAllGaps')}
             >
               <FoldHorizontal className="w-3 h-3" />
             </Button>
@@ -197,22 +199,22 @@ export const TrackHeader = memo(function TrackHeader({
 
       <ContextMenuContent className="w-52">
         <ContextMenuItem onClick={onCloseGaps}>
-          Close All Gaps
+          {t('track.closeAllGaps')}
         </ContextMenuItem>
 
         <ContextMenuSeparator />
         <ContextMenuItem onClick={onAddVideoTrack}>
-          Add Video Track
+          {t('track.addVideoTrack')}
         </ContextMenuItem>
         <ContextMenuItem onClick={onAddAudioTrack}>
-          Add Audio Track
+          {t('track.addAudioTrack')}
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem disabled={!canDeleteTrack} onClick={onDeleteTrack}>
-          Delete Track
+          {t('track.deleteTrack')}
         </ContextMenuItem>
         <ContextMenuItem disabled={!canDeleteEmptyTracks} onClick={onDeleteEmptyTracks}>
-          Delete Empty Tracks
+          {t('track.deleteEmptyTracks')}
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

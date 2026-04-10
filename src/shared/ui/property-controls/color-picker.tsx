@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, Droplet } from 'lucide-react';
 import { HexColorPicker } from 'react-colorful';
 import { Button } from '@/components/ui/button';
 import { PropertyRow } from './property-row';
@@ -74,6 +74,22 @@ export const ColorPicker = memo(function ColorPicker({
     [onChange]
   );
 
+  const handleEyeDropper = useCallback(async () => {
+    if ('EyeDropper' in window) {
+      try {
+        const eyeDropper = new (window as any).EyeDropper();
+        const result = await eyeDropper.open();
+        const pickedColor = result.sRGBHex;
+        setLocalColor(pickedColor);
+        onChange(pickedColor);
+      } catch (e) {
+        console.error('EyeDropper error:', e);
+      }
+    } else {
+      alert('您的浏览器不支持取色器功能，请使用最新版本的 Chrome 或 Edge 浏览器。');
+    }
+  }, [onChange]);
+
   // Click outside to close
   useEffect(() => {
     if (!isOpen) return;
@@ -114,6 +130,18 @@ export const ColorPicker = memo(function ColorPicker({
           title="Reset"
         >
           <RotateCcw className="w-3.5 h-3.5" />
+        </Button>
+      )}
+
+      {!disabled && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 flex-shrink-0"
+          onClick={handleEyeDropper}
+          title="取色器"
+        >
+          <Droplet className="w-3.5 h-3.5" />
         </Button>
       )}
 

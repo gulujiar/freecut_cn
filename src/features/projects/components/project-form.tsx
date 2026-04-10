@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
@@ -32,24 +33,16 @@ export function ProjectForm({
   isSubmitting = false,
   hideHeader = false,
 }: ProjectFormProps) {
-  const resolvedDefaultValues = useMemo(
-    () => ({
-      ...DEFAULT_PROJECT_VALUES,
-      ...defaultValues,
-    }),
-    [defaultValues]
-  );
-
+  const { t } = useTranslation();
   const {
     register,
     handleSubmit,
     formState: { errors, isValid },
     watch,
     setValue,
-    reset,
   } = useForm<ProjectFormData>({
     resolver: zodResolver(projectFormSchema),
-    defaultValues: resolvedDefaultValues,
+    defaultValues: defaultValues || DEFAULT_PROJECT_VALUES,
     mode: 'onChange',
   });
 
@@ -58,23 +51,19 @@ export function ProjectForm({
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(() =>
     matchTemplateId(
-      resolvedDefaultValues.width,
-      resolvedDefaultValues.height
+      defaultValues?.width ?? DEFAULT_PROJECT_VALUES.width,
+      defaultValues?.height ?? DEFAULT_PROJECT_VALUES.height
     )
   );
 
   useEffect(() => {
-    reset(resolvedDefaultValues);
-  }, [reset, resolvedDefaultValues]);
-
-  useEffect(() => {
     setSelectedTemplateId(
       matchTemplateId(
-        resolvedDefaultValues.width,
-        resolvedDefaultValues.height
+        defaultValues?.width ?? DEFAULT_PROJECT_VALUES.width,
+        defaultValues?.height ?? DEFAULT_PROJECT_VALUES.height
       )
     );
-  }, [resolvedDefaultValues.height, resolvedDefaultValues.width]);
+  }, [defaultValues?.width, defaultValues?.height]);
 
   const fps = watch('fps');
   const fpsOptions = useMemo(() => getProjectFpsOptions(fps), [fps]);
@@ -97,12 +86,12 @@ export function ProjectForm({
         <div className="panel-header border-b border-border">
           <div className="max-w-3xl mx-auto px-6 py-5">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground mb-1">
-              {isEditing ? 'Edit Project' : 'Create New Project'}
+              {isEditing ? t('projects.editProject') : t('projects.createNewProject')}
             </h1>
             <p className="text-sm text-muted-foreground">
               {isEditing
-                ? 'Update your project settings'
-                : 'Set up your video editing workspace'}
+                ? t('projects.updateSettings')
+                : t('projects.setupWorkspace')}
             </p>
           </div>
         </div>
@@ -115,21 +104,21 @@ export function ProjectForm({
           <div className="panel-bg border border-border rounded-lg p-6">
             <div className="flex items-center gap-3 mb-6">
               <div className="h-8 w-1 bg-primary rounded-full" />
-              <h2 className="text-lg font-medium text-foreground">Project Details</h2>
+              <h2 className="text-lg font-medium text-foreground">{t('projects.projectDetails')}</h2>
             </div>
 
             <div className="space-y-5">
               {/* Project Name */}
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-foreground mb-2">
-                  Project Name <span className="text-destructive">*</span>
+                  {t('projects.projectName')} <span className="text-destructive">*</span>
                 </label>
                 <input
                   id="name"
                   type="text"
                   {...register('name')}
                   className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                  placeholder="Enter project name..."
+                  placeholder={t('projects.enterProjectName')}
                 />
                 {errors.name && (
                   <p className="mt-1.5 text-sm text-destructive">{errors.name.message}</p>
@@ -142,14 +131,14 @@ export function ProjectForm({
                   htmlFor="description"
                   className="block text-sm font-medium text-foreground mb-2"
                 >
-                  Description
+                  {t('projects.description')}
                 </label>
                 <textarea
                   id="description"
                   rows={3}
                   {...register('description')}
                   className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all resize-none"
-                  placeholder="Brief description of your project..."
+                  placeholder={t('projects.briefDescription')}
                 />
                 {errors.description && (
                   <p className="mt-1.5 text-sm text-destructive">{errors.description.message}</p>
@@ -164,13 +153,13 @@ export function ProjectForm({
            <div className="panel-bg border border-border rounded-lg p-6">
              <div className="flex items-center gap-3 mb-6">
                <div className="h-8 w-1 bg-primary rounded-full" />
-               <h2 className="text-lg font-medium text-foreground">Video Settings</h2>
+               <h2 className="text-lg font-medium text-foreground">{t('projects.videoSettings')}</h2>
              </div>
 
              <div className="space-y-6">
                {/* Resolution — visual template picker */}
                <div>
-                 <p className="text-sm font-medium text-foreground mb-3">Resolution</p>
+                 <p className="text-sm font-medium text-foreground mb-3">{t('projects.resolution')}</p>
                  <ProjectTemplatePicker
                    selectedTemplateId={selectedTemplateId === 'custom' ? undefined : selectedTemplateId}
                    onSelectTemplate={handleSelectTemplate}
@@ -180,7 +169,7 @@ export function ProjectForm({
                  {selectedTemplateId === 'custom' && (
                    <div className="mt-4 flex items-center gap-3">
                      <div className="flex-1">
-                       <label htmlFor="width" className="block text-xs font-medium text-muted-foreground mb-1">Width (px)</label>
+                       <label htmlFor="width" className="block text-xs font-medium text-muted-foreground mb-1">{t('projects.width')}</label>
                        <input
                          id="width"
                          type="number"
@@ -193,7 +182,7 @@ export function ProjectForm({
                       </div>
                       <span className="text-muted-foreground mt-4">×</span>
                       <div className="flex-1">
-                        <label htmlFor="height" className="block text-xs font-medium text-muted-foreground mb-1">Height (px)</label>
+                        <label htmlFor="height" className="block text-xs font-medium text-muted-foreground mb-1">{t('projects.height')}</label>
                         <input
                           id="height"
                           type="number"
@@ -211,7 +200,7 @@ export function ProjectForm({
                {/* Frame Rate */}
                <div>
                  <label htmlFor="fps" className="block text-sm font-medium text-foreground mb-2">
-                   Frame Rate
+                   {t('projects.frameRate')}
                  </label>
                  <Select
                    value={fps.toString()}
@@ -239,17 +228,17 @@ export function ProjectForm({
           <div className="flex gap-3 justify-end">
             {onCancel ? (
               <Button type="button" variant="outline" size="lg" disabled={isSubmitting} onClick={onCancel}>
-                Cancel
+                {t('common.cancel')}
               </Button>
             ) : (
               <Link to="/projects">
                 <Button type="button" variant="outline" size="lg" disabled={isSubmitting}>
-                  Cancel
+                  {t('common.cancel')}
                 </Button>
               </Link>
             )}
             <Button type="submit" size="lg" className="min-w-[160px]" disabled={!isValid || isSubmitting}>
-              {isSubmitting ? 'Saving...' : isEditing ? 'Update Project' : 'Create Project'}
+              {isSubmitting ? t('projects.saving') : isEditing ? t('projects.updateProject') : t('projects.createProject')}
             </Button>
           </div>
         </form>

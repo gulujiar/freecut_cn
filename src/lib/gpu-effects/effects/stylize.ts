@@ -2,7 +2,7 @@ import type { GpuEffectDefinition } from '../types';
 
 export const vignette: GpuEffectDefinition = {
   id: 'gpu-vignette',
-  name: 'Vignette',
+  name: '暗角',
   category: 'stylize',
   entryPoint: 'vignetteFragment',
   uniformSize: 16,
@@ -35,7 +35,7 @@ fn vignetteFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const grain: GpuEffectDefinition = {
   id: 'gpu-grain',
-  name: 'Film Grain',
+  name: '胶片颗粒',
   category: 'stylize',
   entryPoint: 'grainFragment',
   uniformSize: 16,
@@ -71,7 +71,7 @@ fn grainFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const sharpen: GpuEffectDefinition = {
   id: 'gpu-sharpen',
-  name: 'Sharpen',
+  name: '锐化',
   category: 'stylize',
   entryPoint: 'sharpenFragment',
   uniformSize: 16,
@@ -110,7 +110,7 @@ fn sharpenFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const posterize: GpuEffectDefinition = {
   id: 'gpu-posterize',
-  name: 'Posterize',
+  name: '色调分离',
   category: 'stylize',
   entryPoint: 'posterizeFragment',
   uniformSize: 16,
@@ -134,7 +134,7 @@ fn posterizeFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const glow: GpuEffectDefinition = {
   id: 'gpu-glow',
-  name: 'Glow',
+  name: '发光',
   category: 'stylize',
   entryPoint: 'glowFragment',
   uniformSize: 32,
@@ -193,7 +193,7 @@ fn glowFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const edgeDetect: GpuEffectDefinition = {
   id: 'gpu-edge-detect',
-  name: 'Edge Detect',
+  name: '边缘检测',
   category: 'stylize',
   entryPoint: 'edgeDetectFragment',
   uniformSize: 16,
@@ -229,7 +229,7 @@ fn edgeDetectFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const scanlines: GpuEffectDefinition = {
   id: 'gpu-scanlines',
-  name: 'Scanlines',
+  name: '扫描线',
   category: 'stylize',
   entryPoint: 'scanlinesFragment',
   uniformSize: 16,
@@ -259,7 +259,7 @@ fn scanlinesFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const colorGlitch: GpuEffectDefinition = {
   id: 'gpu-color-glitch',
-  name: 'Color Glitch',
+  name: '颜色故障',
   category: 'stylize',
   entryPoint: 'colorGlitchFragment',
   uniformSize: 16,
@@ -339,7 +339,7 @@ function legacyDotRatioToRadius(dotSize: number | undefined, spacing: number | u
 // https://github.com/paper-design/shaders
 export const halftone: GpuEffectDefinition = {
   id: 'gpu-halftone',
-  name: 'Halftone',
+  name: '半色调',
   category: 'stylize',
   entryPoint: 'halftoneFragment',
   uniformSize: 80,
@@ -800,7 +800,7 @@ const ASCII_CHARSET_MAP: Record<string, number> = {
 
 export const dither: GpuEffectDefinition = {
   id: 'gpu-dither',
-  name: 'Dither',
+  name: '抖动',
   category: 'stylize',
   entryPoint: 'ditherFragment',
   uniformSize: 48,
@@ -1185,7 +1185,7 @@ fn ditherFragment(input: VertexOutput) -> @location(0) vec4f {
 // subset: per-cell sampling, preset character sets, and source/mono coloring.
 export const ascii: GpuEffectDefinition = {
   id: 'gpu-ascii',
-  name: 'ASCII',
+  name: '字符画',
   category: 'stylize',
   entryPoint: 'asciiFragment',
   uniformSize: 96,
@@ -1523,7 +1523,7 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const threshold: GpuEffectDefinition = {
   id: 'gpu-threshold',
-  name: 'Threshold',
+  name: '阈值',
   category: 'stylize',
   entryPoint: 'thresholdFragment',
   uniformSize: 16,

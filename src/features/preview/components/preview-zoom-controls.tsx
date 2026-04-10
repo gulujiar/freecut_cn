@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ZoomIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,11 +12,12 @@ import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { usePreviewZoom } from '../hooks/use-preview-zoom';
 
 export function PreviewZoomControls() {
+  const { t } = useTranslation();
   const { zoom, zoomPresets, handlePresetZoom } = usePreviewZoom();
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   const currentLabel = zoom === -1
-    ? 'Auto'
+    ? t('previewZoom.auto')
     : zoomPresets.find((p) => p.value === zoom)?.label || `${Math.round(zoom * 100)}%`;
 
   const blurTrigger = useCallback(() => {
@@ -34,7 +36,7 @@ export function PreviewZoomControls() {
           variant="ghost"
           className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1 px-1.5"
           style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlButtonSize }}
-          data-tooltip={`Zoom: ${currentLabel}`}
+          data-tooltip={`${t('previewZoom.zoom')}: ${currentLabel}`}
           aria-label={`Preview zoom: ${currentLabel}`}
           onKeyDown={(e) => {
             // Space is reserved for global play/pause

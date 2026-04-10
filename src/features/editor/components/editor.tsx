@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback, memo, lazy, Suspense } from 'react';
 import { useNavigate, useRouter } from '@tanstack/react-router';
+import { useTranslation } from 'react-i18next';
 import { createLogger } from '@/shared/logging/logger';
 import {
   ResizablePanelGroup,
@@ -154,6 +155,7 @@ export const LoadedEditor = memo(function LoadedEditor({
   migration,
 }: EditorProps) {
   const router = useRouter();
+  const { t } = useTranslation();
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [bundleExportDialogOpen, setBundleExportDialogOpen] = useState(false);
   const [bundleFileHandle, setBundleFileHandle] = useState<FileSystemFileHandle | undefined>();
@@ -318,15 +320,15 @@ export const LoadedEditor = memo(function LoadedEditor({
     try {
       await saveTimeline(projectId);
       logger.debug('Project saved successfully');
-      toast.success('Project saved');
+      toast.success(t('toast.projectSaved'));
     } catch (error) {
       logger.error('Failed to save project:', error);
-      toast.error('Failed to save project');
+      toast.error(t('toast.failedToSaveProject'));
       throw error; // Re-throw so callers know save failed
     } finally {
       isSavingRef.current = false;
     }
-  }, [projectId]);
+  }, [projectId, t]);
 
   const handleExport = useCallback(() => {
     // Pause playback when opening export dialog

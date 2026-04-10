@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { AlertTriangle, HardDrive, RefreshCw } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 interface ProjectUpgradeDialogProps {
   backupName: string;
@@ -30,6 +31,7 @@ export function ProjectUpgradeDialog({
   projectName,
   storedSchemaVersion,
 }: ProjectUpgradeDialogProps) {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
       if (!nextOpen && !isUpgrading) {
@@ -48,21 +50,22 @@ export function ProjectUpgradeDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-500" />
-            Upgrade Project Before Opening
+            {t('dialogs.projectUpgrade.title')}
           </DialogTitle>
           <DialogDescription className="space-y-3 pt-1">
             <span className="block">
-              <strong>{projectName}</strong> was saved with project schema v{storedSchemaVersion},
-              but this build expects v{currentSchemaVersion}.
+              {t('dialogs.projectUpgrade.description1', { 
+                projectName, 
+                storedVersion: storedSchemaVersion, 
+                currentVersion: currentSchemaVersion 
+              })}
             </span>
             <span className="block">
-              FreeCut can upgrade it for you before loading the editor. A backup of the
-              pre-upgrade project will be created first so you can restore the old data if
-              anything looks off.
+              {t('dialogs.projectUpgrade.description2')}
             </span>
             <span className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm text-foreground">
               <HardDrive className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              Backup copy: <strong>{backupName}</strong>
+              {t('dialogs.projectUpgrade.backupCopy')} <strong>{backupName}</strong>
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -72,7 +75,7 @@ export function ProjectUpgradeDialog({
             onClick={onCancel}
             disabled={isUpgrading}
           >
-            Cancel
+            {t('dialogs.projectUpgrade.cancel')}
           </Button>
           <Button
             onClick={onConfirm}
@@ -80,7 +83,7 @@ export function ProjectUpgradeDialog({
             className="gap-2"
           >
             <RefreshCw className={`h-4 w-4 ${isUpgrading ? 'animate-spin' : ''}`} />
-            {isUpgrading ? 'Creating Backup...' : 'Create Backup & Upgrade'}
+            {isUpgrading ? t('dialogs.projectUpgrade.creatingBackup') : t('dialogs.projectUpgrade.createBackupUpgrade')}
           </Button>
         </DialogFooter>
       </DialogContent>

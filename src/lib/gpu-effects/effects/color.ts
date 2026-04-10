@@ -2,7 +2,7 @@ import type { GpuEffectDefinition } from '../types';
 
 export const brightness: GpuEffectDefinition = {
   id: 'gpu-brightness',
-  name: 'Brightness',
+  name: '亮度',
   category: 'color',
   entryPoint: 'brightnessFragment',
   uniformSize: 16,
@@ -25,7 +25,7 @@ fn brightnessFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const contrast: GpuEffectDefinition = {
   id: 'gpu-contrast',
-  name: 'Contrast',
+  name: '对比度',
   category: 'color',
   entryPoint: 'contrastFragment',
   uniformSize: 16,
@@ -48,7 +48,7 @@ fn contrastFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const exposure: GpuEffectDefinition = {
   id: 'gpu-exposure',
-  name: 'Exposure',
+  name: '曝光',
   category: 'color',
   entryPoint: 'exposureFragment',
   uniformSize: 16,
@@ -77,7 +77,7 @@ fn exposureFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const hueShift: GpuEffectDefinition = {
   id: 'gpu-hue-shift',
-  name: 'Hue Shift',
+  name: '色相偏移',
   category: 'color',
   entryPoint: 'hueShiftFragment',
   uniformSize: 16,
@@ -101,7 +101,7 @@ fn hueShiftFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const invert: GpuEffectDefinition = {
   id: 'gpu-invert',
-  name: 'Invert',
+  name: '反相',
   category: 'color',
   entryPoint: 'invertFragment',
   uniformSize: 0,
@@ -119,7 +119,7 @@ fn invertFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const levels: GpuEffectDefinition = {
   id: 'gpu-levels',
-  name: 'Levels',
+  name: '色阶',
   category: 'color',
   entryPoint: 'levelsFragment',
   uniformSize: 32,
@@ -156,7 +156,7 @@ fn levelsFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const saturation: GpuEffectDefinition = {
   id: 'gpu-saturation',
-  name: 'Saturation',
+  name: '饱和度',
   category: 'color',
   entryPoint: 'saturationFragment',
   uniformSize: 16,
@@ -180,7 +180,7 @@ fn saturationFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const temperature: GpuEffectDefinition = {
   id: 'gpu-temperature',
-  name: 'Temperature',
+  name: '色温',
   category: 'color',
   entryPoint: 'temperatureFragment',
   uniformSize: 16,
@@ -211,7 +211,7 @@ fn temperatureFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const grayscale: GpuEffectDefinition = {
   id: 'gpu-grayscale',
-  name: 'Grayscale',
+  name: '灰度',
   category: 'color',
   entryPoint: 'grayscaleFragment',
   uniformSize: 16,
@@ -235,7 +235,7 @@ fn grayscaleFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const sepia: GpuEffectDefinition = {
   id: 'gpu-sepia',
-  name: 'Sepia',
+  name: '复古棕',
   category: 'color',
   entryPoint: 'sepiaFragment',
   uniformSize: 16,
@@ -262,7 +262,7 @@ fn sepiaFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const curves: GpuEffectDefinition = {
   id: 'gpu-curves',
-  name: 'Curves',
+  name: '曲线',
   category: 'color',
   entryPoint: 'curvesFragment',
   uniformSize: 48,
@@ -325,7 +325,7 @@ fn curvesFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const colorWheels: GpuEffectDefinition = {
   id: 'gpu-color-wheels',
-  name: 'Color Wheels',
+  name: '色轮',
   category: 'color',
   entryPoint: 'colorWheelsFragment',
   uniformSize: 48,
@@ -391,7 +391,7 @@ fn colorWheelsFragment(input: VertexOutput) -> @location(0) vec4f {
 
 export const vibrance: GpuEffectDefinition = {
   id: 'gpu-vibrance',
-  name: 'Vibrance',
+  name: '自然饱和度',
   category: 'color',
   entryPoint: 'vibranceFragment',
   uniformSize: 16,

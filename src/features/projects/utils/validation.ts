@@ -59,7 +59,6 @@ export type ProjectFormData = z.infer<typeof projectFormSchema>;
  */
 export interface ProjectTemplate {
   id: string;
-  platform: string;
   name: string;
   namePrefix: string;
   width: number;
@@ -68,62 +67,55 @@ export interface ProjectTemplate {
 }
 
 /**
- * Project templates for common platforms
- * 6 preset configurations with collision-free naming
+ * Project templates for common resolutions
  */
 export const PROJECT_TEMPLATES: readonly ProjectTemplate[] = [
   {
-    id: 'youtube-1080p',
-    platform: 'YouTube',
-    name: 'YouTube 1080p',
-    namePrefix: 'YouTube',
+    id: '1080p',
+    name: '1080p 全高清',
+    namePrefix: '1080p',
     width: 1920,
     height: 1080,
     fps: 30,
   },
   {
     id: 'vertical-9-16',
-    platform: 'Vertical',
-    name: 'Shorts / TikTok / Reels',
-    namePrefix: 'Vertical',
+    name: '竖屏 9:16',
+    namePrefix: '竖屏',
     width: 1080,
     height: 1920,
     fps: 30,
   },
   {
-    id: 'instagram-square',
-    platform: 'Instagram',
-    name: 'Instagram Square',
-    namePrefix: 'Instagram Square',
+    id: 'square',
+    name: '正方形 1:1',
+    namePrefix: '正方形',
     width: 1080,
     height: 1080,
     fps: 30,
   },
   {
-    id: 'instagram-portrait',
-    platform: 'Instagram',
-    name: 'Instagram Portrait',
-    namePrefix: 'Instagram Portrait',
+    id: 'portrait-4-5',
+    name: '人像 4:5',
+    namePrefix: '人像',
     width: 1080,
     height: 1350,
     fps: 30,
   },
   {
-    id: 'twitter-x',
-    platform: 'Twitter/X',
-    name: 'Twitter/X',
-    namePrefix: 'Twitter/X',
-    width: 1200,
-    height: 675,
+    id: '2k',
+    name: '2K 超清',
+    namePrefix: '2K',
+    width: 2560,
+    height: 1440,
     fps: 30,
   },
   {
-    id: 'linkedin',
-    platform: 'LinkedIn',
-    name: 'LinkedIn',
-    namePrefix: 'LinkedIn',
-    width: 1200,
-    height: 627,
+    id: '4k',
+    name: '4K 超高清',
+    namePrefix: '4K',
+    width: 3840,
+    height: 2160,
     fps: 30,
   },
 ] as const;

@@ -329,6 +329,7 @@ export class EffectsPipeline {
         colorAttachments: [{
           view: outputView,
           loadOp: 'clear',
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
           storeOp: 'store',
         }],
       });
@@ -420,6 +421,7 @@ export class EffectsPipeline {
       colorAttachments: [{
         view: outputCtx.getCurrentTexture().createView(),
         loadOp: 'clear',
+        clearValue: { r: 0, g: 0, b: 0, a: 0 },
         storeOp: 'store',
       }],
     });

@@ -11,12 +11,14 @@ import {
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { PROPERTY_LABELS } from '@/types/keyframe';
 import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Confirmation dialog for clearing keyframes from selected items.
  * Triggered by Shift+A hotkey or context menu actions.
  */
 export function ClearKeyframesDialog() {
+  const { t } = useTranslation();
   const isOpen = useClearKeyframesDialogStore((s) => s.isOpen);
   const itemIds = useClearKeyframesDialogStore((s) => s.itemIds);
   const property = useClearKeyframesDialogStore((s) => s.property);
@@ -43,10 +45,12 @@ export function ClearKeyframesDialog() {
   const itemText = itemCount === 1 ? 'clip' : 'clips';
   const propertyLabel = property ? PROPERTY_LABELS[property] : null;
 
-  const title = property ? `Clear ${propertyLabel} Keyframes` : 'Clear All Keyframes';
+  const title = property 
+    ? t('dialogs.clearKeyframes.titleProperty', { property: propertyLabel }) 
+    : t('dialogs.clearKeyframes.titleAll');
   const description = property
-    ? `Are you sure you want to clear all ${propertyLabel} keyframes from ${itemCount} ${itemText}?`
-    : `Are you sure you want to clear all keyframes from ${itemCount} ${itemText}?`;
+    ? t('dialogs.clearKeyframes.descriptionProperty', { property: propertyLabel, count: itemCount })
+    : t('dialogs.clearKeyframes.descriptionAll', { count: itemCount });
 
   return (
     <AlertDialog open={isOpen} onOpenChange={(open) => !open && close()}>
@@ -57,14 +61,14 @@ export function ClearKeyframesDialog() {
             {description}
             <br />
             <span className="text-muted-foreground text-xs mt-1 block">
-              This action can be undone with Ctrl+Z.
+              {t('dialogs.clearKeyframes.canUndo')}
             </span>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogCancel>{t('dialogs.clearKeyframes.cancel')}</AlertDialogCancel>
           <AlertDialogAction onClick={handleConfirm}>
-            Clear Keyframes
+            {t('dialogs.clearKeyframes.clear')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

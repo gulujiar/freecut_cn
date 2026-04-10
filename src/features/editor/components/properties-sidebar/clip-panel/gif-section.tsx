@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react';
 import { Image, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from 'react-i18next';
 import type { TimelineItem, ImageItem } from '@/types/timeline';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import type { TimelineState, TimelineActions } from '@/features/editor/deps/timeline-store';
@@ -37,6 +38,7 @@ function isAnimatedImageItem(item: TimelineItem): item is ImageItem {
  * - Slower speed = animation plays slower within same duration
  */
 export function GifSection({ items }: GifSectionProps) {
+  const { t } = useTranslation();
   const rateStretchItem = useTimelineStore((s: TimelineState & TimelineActions) => s.rateStretchItem);
 
   const gifItems = useMemo(
@@ -87,9 +89,9 @@ export function GifSection({ items }: GifSectionProps) {
   if (gifItems.length === 0) return null;
 
   return (
-    <PropertySection title="Animation" icon={Image} defaultOpen={true}>
+    <PropertySection title={t('properties.animation')} icon={Image} defaultOpen={true}>
       {/* Playback Speed - affects animation rate (not duration) */}
-      <PropertyRow label="Speed">
+      <PropertyRow label={t('properties.speed')}>
         <div className="flex items-center gap-1 w-full">
           <NumberInput
             value={speed}
@@ -105,7 +107,7 @@ export function GifSection({ items }: GifSectionProps) {
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetSpeed}
-            title="Reset to 1x"
+            title={t('properties.resetTo1x')}
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>

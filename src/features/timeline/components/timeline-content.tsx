@@ -556,77 +556,10 @@ export const TimelineContent = memo(function TimelineContent({
     }
   }, []);
 
-  const handleTimelineMouseMove = useCallback((e: React.MouseEvent) => {
-    // Skip during playback
-    if (usePlaybackStore.getState().isPlaying) {
-      if (usePlaybackStore.getState().previewFrame !== null) {
-        setPreviewFrameRef.current(null);
-      }
-      return;
-    }
-
-    const body = document.body;
-    const gestureCursorActive = ACTIVE_TIMELINE_GESTURE_CURSOR_CLASSES.some((className) => body.classList.contains(className));
-    const interactionLockActive = gestureCursorActive || body.style.userSelect === 'none';
-    if (interactionLockActive) {
-      if (usePlaybackStore.getState().previewFrame !== null) {
-        setPreviewFrameRef.current(null);
-      }
-      return;
-    }
-
-    // Skip during any drag (playhead drag, item drag, marquee)
-    if (marqueeWasActiveRef.current || dragWasActiveRef.current || scrubWasActiveRef.current) return;
-
-    const scrollContainer = containerRef.current;
-    if (!scrollContainer) return;
-
-    const rect = scrollContainer.getBoundingClientRect();
-    const x = e.clientX - rect.left + scrollContainer.scrollLeft;
-
-    // In razor mode with Shift held, snap to nearby targets
-    const isRazor = useSelectionStore.getState().activeTool === 'razor';
-    let frame: number;
-    if (isRazor && e.shiftKey) {
-      const snapTargets = buildRazorSnapTargets();
-      const { splitFrame } = getRazorSplitPosition({
-        cursorX: x,
-        currentFrame: currentFrameRef.current,
-        isPlaying: false,
-        frameToPixels: frameToPixelsRef.current,
-        pixelsToFrame: pixelsToFrameRef.current,
-        shiftHeld: true,
-        snapTargets,
-      });
-      frame = Math.max(0, Math.min(splitFrame, maxTimelineFrameRef.current));
-    } else {
-      frame = Math.max(
-        0,
-        Math.min(Math.round(pixelsToFrameRef.current(x)), maxTimelineFrameRef.current)
-      );
-    }
-
-    // Detect hovered item
-    const target = e.target as HTMLElement;
-    const itemEl = target.closest('[data-item-id]') as HTMLElement | null;
-    const itemId = itemEl?.getAttribute('data-item-id') ?? undefined;
-
-    // RAF-throttle the store update
-    if (previewRafRef.current !== null) {
-      cancelAnimationFrame(previewRafRef.current);
-    }
-    previewRafRef.current = requestAnimationFrame(() => {
-      previewRafRef.current = null;
-      setPreviewFrameRef.current(frame, itemId);
-    });
+  const handleTimelineMouseMove = useCallback((_e: React.MouseEvent) => {
   }, []);
 
   const handleTimelineMouseLeave = useCallback(() => {
-    if (previewRafRef.current !== null) {
-      cancelAnimationFrame(previewRafRef.current);
-      previewRafRef.current = null;
-    }
-    setPreviewFrameRef.current(null);
   }, []);
 
   // Calculate the actual timeline duration and width based on content

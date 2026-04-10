@@ -224,21 +224,37 @@ export async function checkStorageQuota(): Promise<{
   available: number;
 }> {
   if (!navigator.storage || !navigator.storage.estimate) {
-    throw new Error('Storage estimation API not supported');
+    logger.warn('Storage estimation API not supported, returning default values');
+    return {
+      usage: 0,
+      quota: 0,
+      percentUsed: 0,
+      available: Number.MAX_SAFE_INTEGER,
+    };
   }
 
-  const estimate = await navigator.storage.estimate();
-  const usage = estimate.usage || 0;
-  const quota = estimate.quota || 0;
-  const percentUsed = quota > 0 ? (usage / quota) * 100 : 0;
-  const available = quota - usage;
+  try {
+    const estimate = await navigator.storage.estimate();
+    const usage = estimate.usage || 0;
+    const quota = estimate.quota || 0;
+    const percentUsed = quota > 0 ? (usage / quota) * 100 : 0;
+    const available = quota > 0 ? quota - usage : Number.MAX_SAFE_INTEGER;
 
-  return {
-    usage,
-    quota,
-    percentUsed,
-    available,
-  };
+    return {
+      usage,
+      quota,
+      percentUsed,
+      available,
+    };
+  } catch (error) {
+    logger.warn('Failed to check storage quota:', error);
+    return {
+      usage: 0,
+      quota: 0,
+      percentUsed: 0,
+      available: Number.MAX_SAFE_INTEGER,
+    };
+  }
 }
 
 /**

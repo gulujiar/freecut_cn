@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Save, Trash2 } from 'lucide-react';
 import { createLogger } from '@/shared/logging/logger';
+import { useTranslation } from 'react-i18next';
 
 const logger = createLogger('UnsavedChangesDialog');
 
@@ -29,6 +30,7 @@ export function UnsavedChangesDialog({
   onSave,
   projectName,
 }: UnsavedChangesDialogProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [isSaving, setIsSaving] = useState(false);
 
@@ -55,20 +57,19 @@ export function UnsavedChangesDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
+          <AlertDialogTitle>{t('dialogs.unsavedChanges.title')}</AlertDialogTitle>
           <AlertDialogDescription>
             {projectName ? (
               <>
-                You have unsaved changes in <strong>{projectName}</strong>. Would
-                you like to save before leaving?
+                {t('dialogs.unsavedChanges.description', { projectName })}
               </>
             ) : (
-              'You have unsaved changes. Would you like to save before leaving?'
+              t('dialogs.unsavedChanges.descriptionNoName')
             )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className="gap-2 sm:gap-0">
-          <AlertDialogCancel disabled={isSaving}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isSaving}>{t('dialogs.unsavedChanges.cancel')}</AlertDialogCancel>
           <Button
             variant="destructive"
             onClick={handleDiscard}
@@ -76,7 +77,7 @@ export function UnsavedChangesDialog({
             className="gap-2"
           >
             <Trash2 className="w-4 h-4" />
-            Discard
+            {t('dialogs.unsavedChanges.discard')}
           </Button>
           <AlertDialogAction
             onClick={handleSaveAndExit}
@@ -84,7 +85,7 @@ export function UnsavedChangesDialog({
             className="gap-2"
           >
             <Save className="w-4 h-4" />
-            {isSaving ? 'Saving...' : 'Save & Exit'}
+            {isSaving ? t('dialogs.unsavedChanges.saving') : t('dialogs.unsavedChanges.saveExit')}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

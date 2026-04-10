@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { Volume2, RotateCcw } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from 'react-i18next';
 import type { TimelineItem } from '@/types/timeline';
 import { useKeyframesStore, useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
@@ -32,6 +33,7 @@ const AUDIO_GAIN_DB_MAX = 12;
  * Shown for video and audio clips.
  */
 export function AudioSection({ items }: AudioSectionProps) {
+  const { t } = useTranslation();
   const updateItem = useTimelineStore((s) => s.updateItem);
 
   // Gizmo store for live audio preview
@@ -224,9 +226,9 @@ export function AudioSection({ items }: AudioSectionProps) {
   if (audioItems.length === 0) return null;
 
   return (
-    <PropertySection title="Audio" icon={Volume2} defaultOpen={true}>
+    <PropertySection title={t('properties.audioSection')} icon={Volume2} defaultOpen={true}>
       {/* Volume in dB (-60 to +12, 0 dB = unity gain) */}
-      <PropertyRow label="Gain">
+      <PropertyRow label={t('properties.gain')}>
         <div className="flex items-center gap-1 w-full">
           <SliderInput
             value={volume}
@@ -248,7 +250,7 @@ export function AudioSection({ items }: AudioSectionProps) {
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetVolume}
-            title="Reset to 0 dB"
+            title={t('properties.resetTo0dB')}
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
@@ -256,7 +258,7 @@ export function AudioSection({ items }: AudioSectionProps) {
       </PropertyRow>
 
       {/* Audio Fades */}
-      <PropertyRow label="Fade In">
+      <PropertyRow label={t('properties.fadeIn')}>
         <div className="flex items-center gap-1 w-full">
           <SliderInput
             value={fadeIn}
@@ -273,14 +275,14 @@ export function AudioSection({ items }: AudioSectionProps) {
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetFadeIn}
-            title="Reset to 0"
+            title={t('properties.resetTo0')}
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
         </div>
       </PropertyRow>
 
-      <PropertyRow label="Fade Out">
+      <PropertyRow label={t('properties.fadeOut')}>
         <div className="flex items-center gap-1 w-full">
           <SliderInput
             value={fadeOut}
@@ -297,7 +299,7 @@ export function AudioSection({ items }: AudioSectionProps) {
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetFadeOut}
-            title="Reset to 0"
+            title={t('properties.resetTo0')}
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
