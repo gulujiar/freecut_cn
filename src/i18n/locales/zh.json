@@ -47,7 +47,20 @@
     "audio": "音频",
     "images": "图片",
     "gifs": "GIF",
-    "copyToClipboard": "复制到剪贴板"
+    "copyToClipboard": "复制到剪贴板",
+    "relinkFile": "重新链接文件...",
+    "generateProxy": "生成代理",
+    "transcribeAudio": "转录音频",
+    "regenerateTranscript": "重新生成转录",
+    "generatingProxy": "正在生成代理",
+    "deleteProxy": "删除代理",
+    "delete": "删除",
+    "deleteMediaTitle": "删除媒体文件？",
+    "deleteMediaDesc": "确定要删除\"{{fileName}}\"吗？此操作无法撤销。",
+    "timelineClipsRemoved": "时间线片段将被移除",
+    "timelineClipsRemovedDesc": "时间线和嵌套复合片段中有 {{count}} 个片段引用此媒体，也将被删除。",
+    "cancel": "取消",
+    "deleteAndClips": "删除及 {{count}} 个片段"
   },
   "transitions": {
     "categoryBasic": "基础",

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Video, FileAudio, Image as ImageIcon, MoreVertical, Trash2, Loader2, Link2Off, RefreshCw, Zap, FileText, Play, Square } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +37,7 @@ interface MediaCardProps {
 }
 
 export function MediaCard({ media, selected = false, isBroken = false, onSelect, onDoubleClick, onDelete, onRelink, viewMode = 'grid' }: MediaCardProps) {
+  const { t } = useTranslation();
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
   const [skimProgress, setSkimProgress] = useState<number | null>(null);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
@@ -511,19 +513,19 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
                 {isBroken && onRelink && (
                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onRelink(); }} className="text-primary focus:text-primary">
                     <RefreshCw className="w-3 h-3 mr-2" />
-                    Relink File...
+                    {t('media.relinkFile')}
                   </DropdownMenuItem>
                 )}
                 {canGenerateProxy && !hasProxy && proxyStatus !== 'generating' && (
                   <DropdownMenuItem onClick={handleGenerateProxy}>
                     <Zap className="w-3 h-3 mr-2" />
-                    Generate Proxy
+                    {t('media.generateProxy')}
                   </DropdownMenuItem>
                 )}
                 {isTranscribable && !isBroken && !isTranscribing && (
                   <DropdownMenuItem onClick={handleGenerateTranscript}>
                     <FileText className="w-3 h-3 mr-2" />
-                    {hasTranscript ? 'Regenerate Transcript' : 'Transcribe Audio'}
+                    {hasTranscript ? t('media.regenerateTranscript') : t('media.transcribeAudio')}
                   </DropdownMenuItem>
                 )}
                 {isTranscribable && !isBroken && isTranscribing && (
@@ -535,18 +537,18 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
                 {proxyStatus === 'generating' && (
                   <DropdownMenuItem disabled>
                     <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-                    Generating Proxy{proxyProgress != null ? ` (${Math.round(proxyProgress * 100)}%)` : '...'}
+                    {t('media.generatingProxy')}{proxyProgress != null ? ` (${Math.round(proxyProgress * 100)}%)` : '...'}
                   </DropdownMenuItem>
                 )}
                 {hasProxy && (
                   <DropdownMenuItem onClick={handleDeleteProxy} className="text-destructive focus:text-destructive">
                     <Trash2 className="w-3 h-3 mr-2" />
-                    Delete Proxy
+                    {t('media.deleteProxy')}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={handleDelete} className="text-destructive focus:text-destructive">
                   <Trash2 className="w-3 h-3 mr-2" />
-                  Delete
+                  {t('media.delete')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
