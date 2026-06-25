@@ -79,8 +79,12 @@ function formatFileSize(bytes: number): string {
  */
 function getResolutionOptions(projectWidth: number, projectHeight: number, t: any) {
   const scales = [1, 0.666, 0.5];
+  const presetResolutions = [
+    { width: 2560, height: 1440, label: '2K (2560×1440)' },
+    { width: 3840, height: 2160, label: '4K (3840×2160)' },
+  ];
 
-  return scales.map((scale) => {
+  const scaledOptions = scales.map((scale) => {
     const w = Math.round(projectWidth * scale);
     const h = Math.round(projectHeight * scale);
     const width = w % 2 === 0 ? w : w + 1;
@@ -93,6 +97,13 @@ function getResolutionOptions(projectWidth: number, projectHeight: number, t: an
 
     return { value: `${width}x${height}`, label };
   });
+
+  const presetOptions = presetResolutions.map((preset) => ({
+    value: `${preset.width}x${preset.height}`,
+    label: preset.label,
+  }));
+
+  return [...scaledOptions, ...presetOptions];
 }
 
 function getDefaultCodecForFormat(
@@ -703,6 +714,11 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Switch id="sync-ppt" />
+                    <Label htmlFor="sync-ppt">同步导出PPT</Label>
                   </div>
                 </div>
               </>
