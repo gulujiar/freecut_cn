@@ -24,6 +24,7 @@ import { SettingsDialog } from './settings-dialog';
 import { ShortcutsDialog } from './shortcuts-dialog';
 import { UnsavedChangesDialog } from './unsaved-changes-dialog';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { useMoocStore } from '@/features/editor/deps/mooc-contract';
 
 interface ToolbarProps {
   projectId: string;
@@ -52,6 +53,9 @@ export const Toolbar = memo(function Toolbar({
   const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
   const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
   const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const moocActive = useMoocStore((state) => state.active);
+  const requestEnter = useMoocStore((state) => state.requestEnter);
+  const exitMooc = useMoocStore((state) => state.exit);
 
   const handleBackClick = () => {
     if (isDirty) {
@@ -121,6 +125,26 @@ export const Toolbar = memo(function Toolbar({
       />
 
       <div className="flex items-center gap-1.5">
+        <Button
+          variant={moocActive ? 'default' : 'outline'}
+          size="sm"
+          className="h-7 px-2.5 text-xs"
+          aria-pressed={moocActive}
+          onClick={() => {
+            if (moocActive) {
+              exitMooc();
+              return;
+            }
+            requestEnter({
+              projectId: project.id,
+              width: project.width,
+              height: project.height,
+              fps: project.fps,
+            });
+          }}
+        >
+          慕课序列
+        </Button>
         <Button
           variant="outline"
           size="icon"

@@ -1,4 +1,5 @@
 import type { AnimatableProperty, EasingType, EasingConfig } from './keyframe';
+import type { MoocSequenceDocument } from './mooc';
 import type { Transition } from './transition';
 import type { CropSettings } from './transform';
 
@@ -29,6 +30,13 @@ export interface Project {
    * Updated when rootFolderHandle is set.
    */
   rootFolderName?: string;
+  /**
+   * MOOC sequence document edited by 慕课序列 mode.
+   * This is the source of truth for cue cameras, packaging, and media refs.
+   * The timeline is a compiled view used by preview and export.
+   * Null clears a previously stored sequence.
+   */
+  moocSequence?: MoocSequenceDocument | null;
 }
 
 export interface ProjectTimeline {

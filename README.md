@@ -89,6 +89,10 @@ Layer masks with keyframeable geometry transforms for compositing and selective 
 - Auto-generate caption text items from transcripts
 - Multi-language support
 
+### MOOC sequence mode
+
+The editor includes a Chinese lecture mode for packaged online courses: configurable intro, subtitle cues with one camera each (full slide, slide plus portrait, slide plus half-body lecturer), and a configurable outro. It compiles into the normal timeline, so preview, playback, and video export use the existing engine. The interchange file is FreeCut MOOC Sequence XML 1.0, documented in [docs/mooc-sequence-xml.md](docs/mooc-sequence-xml.md). Setup in Chinese is in [docs/慕课序列编辑.md](docs/慕课序列编辑.md).
+
 ### Other
 
 - Native SVG shapes — rectangle, circle, triangle, ellipse, star, polygon, heart
