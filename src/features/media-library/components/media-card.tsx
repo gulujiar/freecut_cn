@@ -234,7 +234,7 @@ export function MediaCard({ media, selected = false, isBroken = false, onSelect,
 
       try {
         e.dataTransfer.setDragImage(ghost, w / 2, h / 2);
-      } catch (err) {
+      } catch {
         // Some browsers don't support setDragImage, ignore
       }
     }

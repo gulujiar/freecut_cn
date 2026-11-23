@@ -30,5 +30,6 @@ Editor-local adapters for external feature dependencies.
   effects feature components.
 - `export-contract.ts`: adapter exports for editor modules that need
   export feature dialogs/helpers.
+- `mooc-contract.ts`: MOOC sequence mode (board, inspector, preview badge, persistence hydrate).
 - `composition-runtime.ts`: the preferred entry point for editor modules that
   need transform/audio-cache helpers from composition runtime.

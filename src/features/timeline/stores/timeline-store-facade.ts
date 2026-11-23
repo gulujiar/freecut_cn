@@ -45,6 +45,10 @@ import * as timelineActions from './timeline-actions';
 
 // External dependencies for save/load
 import { getProject, updateProject, saveThumbnail } from '@/infrastructure/storage/indexeddb';
+import {
+  moocSequencePersistencePatch,
+  stashLoadedMoocSequence,
+} from '@/shared/mooc/sequence-bridge';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useZoomStore } from './zoom-store';
 import type { ProjectTimeline } from '@/types/project';
@@ -713,6 +717,7 @@ async function saveTimeline(projectId: string): Promise<void> {
     // Clear deprecated thumbnail field when using thumbnailId to save space
     await updateProject(projectId, {
       timeline,
+      ...moocSequencePersistencePatch(),
       ...(thumbnailId && { thumbnailId, thumbnail: undefined }),
       updatedAt: Date.now(),
     });
@@ -770,6 +775,7 @@ async function loadTimeline(
     const migrationResult = migrateProject(rawProject);
     const repairedLegacyLayouts = await repairLegacyProjectAvLayouts(migrationResult.project);
     const project = repairedLegacyLayouts.project;
+    stashLoadedMoocSequence(project.moocSequence);
 
     // Log migration activity
     if (migrationResult.migrated || repairedLegacyLayouts.repaired) {

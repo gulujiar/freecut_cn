@@ -200,14 +200,18 @@ vi.mock('@/features/editor/deps/export-contract', () => ({
   importExportDialog: mocks.importExportDialog,
 }));
 
-vi.mock('@/shared/ui/editor-layout', () => ({
-  getEditorLayout: () => ({
-    timelineDefaultSize: 35,
-    timelineMinSize: 20,
-    timelineMaxSize: 60,
-  }),
-  getEditorLayoutCssVars: () => ({}),
-}));
+vi.mock('@/shared/ui/editor-layout', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/shared/ui/editor-layout')>();
+  return {
+    ...actual,
+    getEditorLayout: () => ({
+      timelineDefaultSize: 35,
+      timelineMinSize: 20,
+      timelineMaxSize: 60,
+    }),
+    getEditorLayoutCssVars: () => ({}),
+  };
+});
 
 vi.mock('@/features/projects/services/project-upgrade-service', () => ({
   createProjectUpgradeBackup: mocks.createProjectUpgradeBackup,

@@ -448,6 +448,110 @@ class MediaLibraryService {
   }
 
   /**
+   * Save generated audio into the project media library.
+   * Metadata and the waveform thumbnail come from the media processor.
+   */
+  async importGeneratedAudio(
+    file: File,
+    projectId: string,
+    options?: {
+      tags?: string[];
+      thumbnailMaxSize?: number;
+      thumbnailQuality?: number;
+    }
+  ): Promise<MediaMetadata> {
+    if (!projectId) {
+      throw new Error('No project selected');
+    }
+
+    const resolvedMimeType = file.type || getMimeType(file);
+    if (!resolvedMimeType.startsWith('audio/')) {
+      throw new Error(`Generated file must be audio. Received "${resolvedMimeType}".`);
+    }
+
+    const thumbnailMaxSize = options?.thumbnailMaxSize ?? 320;
+    const thumbnailQuality = options?.thumbnailQuality ?? 0.6;
+    const { metadata, thumbnail } = await mediaProcessorService.processMedia(
+      file,
+      resolvedMimeType,
+      {
+        generateThumbnail: true,
+        thumbnailMaxSize,
+        thumbnailQuality,
+      }
+    );
+    if (metadata.type !== 'audio') {
+      throw new Error('Generated audio processing did not return audio metadata.');
+    }
+
+    const mediaId = crypto.randomUUID();
+    const createdAt = Date.now();
+    const opfsPath = `content/${mediaId.slice(0, 2)}/${mediaId.slice(2, 4)}/${mediaId}/data`;
+    const mediaMetadata: MediaMetadata = {
+      id: mediaId,
+      storageType: 'opfs',
+      opfsPath,
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: resolvedMimeType,
+      duration: metadata.duration,
+      width: 0,
+      height: 0,
+      fps: 0,
+      codec: metadata.codec || 'unknown',
+      bitrate: metadata.bitrate ?? 0,
+      tags: options?.tags ?? [],
+      createdAt,
+      updatedAt: createdAt,
+    };
+
+    let metadataCreated = false;
+    let thumbnailSaved = false;
+    try {
+      await opfsService.saveFile(opfsPath, await blobToArrayBuffer(file));
+      if (thumbnail) {
+        const thumbnailId = crypto.randomUUID();
+        await saveThumbnailDB({
+          id: thumbnailId,
+          mediaId,
+          blob: thumbnail,
+          timestamp: 0,
+          width: thumbnailMaxSize,
+          height: Math.round(thumbnailMaxSize * 9 / 16),
+        });
+        mediaMetadata.thumbnailId = thumbnailId;
+        thumbnailSaved = true;
+      }
+      await createMediaDB(mediaMetadata);
+      metadataCreated = true;
+      await associateMediaWithProject(projectId, mediaId);
+      return mediaMetadata;
+    } catch (error) {
+      if (metadataCreated) {
+        try {
+          await deleteMediaDB(mediaId);
+        } catch (cleanupError) {
+          logger.warn(`Failed to roll back generated audio metadata ${mediaId}:`, cleanupError);
+        }
+      }
+      if (thumbnailSaved) {
+        this.clearThumbnailCache(mediaId);
+        try {
+          await deleteThumbnailsByMediaId(mediaId);
+        } catch (cleanupError) {
+          logger.warn(`Failed to roll back generated audio thumbnail ${mediaId}:`, cleanupError);
+        }
+      }
+      try {
+        await opfsService.deleteFile(opfsPath);
+      } catch (cleanupError) {
+        logger.warn(`Failed to roll back generated audio file ${opfsPath}:`, cleanupError);
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Delete media from a project with reference counting
    *
    * Removes the media association from the project. If no other projects

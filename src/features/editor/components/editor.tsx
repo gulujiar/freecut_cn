@@ -39,6 +39,14 @@ import { getEditorLayout, getEditorLayoutCssVars } from '@/shared/ui/editor-layo
 import { createProjectUpgradeBackup, formatProjectUpgradeBackupName } from '@/features/editor/deps/projects';
 import { ProjectUpgradeDialog } from './project-upgrade-dialog';
 import { ProjectMediaMatchDialog } from './project-media-match-dialog';
+import {
+  hydrateMoocAfterTimelineLoad,
+  MoocBoard,
+  MoocInspector,
+  MoocPreviewOverlay,
+  MoocReplaceDialog,
+  useMoocStore,
+} from '@/features/editor/deps/mooc-contract';
 const logger = createLogger('Editor');
 const EDITOR_PROJECT_ROUTE_ID = '/editor/$projectId';
 const LazyExportDialog = lazy(() =>
@@ -167,7 +175,8 @@ export const LoadedEditor = memo(function LoadedEditor({
   const propertiesFullColumn = useEditorStore((s) => s.propertiesFullColumn);
   const mediaFullColumn = useEditorStore((s) => s.mediaFullColumn);
   const isMaskEditingActive = useMaskEditorStore((s) => s.isEditing);
-  const hasRefreshedMigrationStateRef = useRef(false);
+    const hasRefreshedMigrationStateRef = useRef(false);
+  const moocActive = useMoocStore((state) => state.active);
 
   // Guard against concurrent saves (e.g., spamming Ctrl+S)
   const isSavingRef = useRef(false);
@@ -243,6 +252,14 @@ export const LoadedEditor = memo(function LoadedEditor({
     void (async () => {
       try {
         await loadTimeline(projectId, { allowProjectUpgrade: migration.requiresUpgrade });
+        if (!cancelled) {
+          await hydrateMoocAfterTimelineLoad({
+            projectId,
+            width: project.width,
+            height: project.height,
+            fps: project.fps,
+          });
+        }
 
         if (cancelled || !migration.requiresUpgrade || hasRefreshedMigrationStateRef.current) {
           return;
@@ -438,15 +455,18 @@ export const LoadedEditor = memo(function LoadedEditor({
               )}
 
               {/* Center - Preview */}
-              <ErrorBoundary level="feature">
-                <PreviewArea project={project} />
-              </ErrorBoundary>
+              <div className="relative h-full min-w-0 flex-1">
+                <ErrorBoundary level="feature">
+                  <PreviewArea project={project} />
+                </ErrorBoundary>
+                {moocActive ? <MoocPreviewOverlay /> : null}
+              </div>
 
               {/* Right Sidebar - Properties (inline with preview) */}
               {!propertiesFullColumn && (
                 <InteractionLockRegion locked={isMaskEditingActive}>
                   <ErrorBoundary level="feature">
-                    <PropertiesSidebar />
+                    {moocActive ? <MoocInspector /> : <PropertiesSidebar />}
                   </ErrorBoundary>
                 </InteractionLockRegion>
               )}
@@ -468,7 +488,7 @@ export const LoadedEditor = memo(function LoadedEditor({
               <ErrorBoundary level="feature">
                 <div className="h-full flex overflow-hidden">
                   <div className="min-w-0 flex-1">
-                    <Timeline duration={timelineDuration} />
+                    {moocActive ? <MoocBoard /> : <Timeline duration={timelineDuration} />}
                   </div>
                   <AudioMeterPanel />
                 </div>
@@ -481,7 +501,7 @@ export const LoadedEditor = memo(function LoadedEditor({
         {propertiesFullColumn && (
           <InteractionLockRegion locked={isMaskEditingActive}>
             <ErrorBoundary level="feature">
-              <PropertiesSidebar />
+              {moocActive ? <MoocInspector /> : <PropertiesSidebar />}
             </ErrorBoundary>
           </InteractionLockRegion>
         )}
@@ -512,6 +532,7 @@ export const LoadedEditor = memo(function LoadedEditor({
       <ClearKeyframesDialog />
 
       <ProjectMediaMatchDialog projectId={projectId} />
+      <MoocReplaceDialog />
 
       {/* Bento Layout Preset Dialog */}
       <BentoLayoutDialog />

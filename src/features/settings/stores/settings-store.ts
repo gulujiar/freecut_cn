@@ -122,7 +122,7 @@ export const useSettingsStore = create<SettingsStore>()(
     (set) => ({
       ...DEFAULT_SETTINGS,
 
-      setSetting: (key, value) => set((state) => {
+      setSetting: (key, value) => set(() => {
         if (key === 'language') {
           i18n.changeLanguage(value as string);
         }
