@@ -1,9 +1,4 @@
-import { createLogger } from '@/shared/logging/logger';
-
-const logger = createLogger('KittenTtsService');
-
 type ModelSize = 'nano' | 'micro' | 'mini';
-type KittenTTSEngine = any;
 
 const MB = 1024 * 1024;
 

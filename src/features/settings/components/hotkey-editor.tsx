@@ -8,7 +8,6 @@ import { cn } from '@/shared/ui/cn';
 import { useTranslation } from 'react-i18next';
 import {
   HOTKEYS,
-  HOTKEY_DESCRIPTIONS,
   createHotkeyExportDocument,
   findHotkeyConflicts,
   formatHotkeyBinding,

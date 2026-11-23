@@ -38,27 +38,11 @@ import { TrackRowFrame, TrackSectionDivider } from './track-row-frame';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 
 // Group utilities
-import { getVisibleTrackIds } from '../utils/group-utils';
-import { getRazorSplitPosition } from '../utils/razor-snap';
 import { getTrackKind } from '../utils/classic-tracks';
 import { resizeTracksOfKindByDelta } from '../utils/track-resize';
-import type { RazorSnapTarget } from '../utils/razor-snap';
 import type { TimelineTrack as TimelineTrackType } from '@/types/timeline';
-import { useMarkersStore } from '../stores/markers-store';
-import { useTransitionsStore } from '../stores/transitions-store';
-import { getFilteredItemSnapEdges } from '../utils/timeline-snap-utils';
 import { expandSelectionWithLinkedItems } from '../utils/linked-items';
 import { getTimelineWidth, getZoomToFitLevel } from '../utils/timeline-layout';
-
-const ACTIVE_TIMELINE_GESTURE_CURSOR_CLASSES = [
-  'timeline-cursor-trim-left',
-  'timeline-cursor-trim-right',
-  'timeline-cursor-trim-center',
-  'timeline-cursor-slip-smart',
-  'timeline-cursor-slide-smart',
-  'timeline-cursor-gauge',
-] as const;
-
 
 interface TimelineContentProps {
   duration: number; // Total timeline duration in seconds
@@ -525,29 +509,6 @@ export const TimelineContent = memo(function TimelineContent({
     }
   };
 
-  // Build snap targets for razor shift-snap (item edges, grid, playhead, markers)
-  // Called on-demand during mouse move — reads stores directly to avoid subscriptions
-  const buildRazorSnapTargets = useCallback((): RazorSnapTarget[] => {
-    const items = useTimelineStore.getState().items;
-    const tracks = useTimelineStore.getState().tracks;
-    const transitions = useTransitionsStore.getState().transitions;
-    const visibleTrackIds = getVisibleTrackIds(tracks);
-
-    // Item edges + transition midpoints
-    const targets: RazorSnapTarget[] = getFilteredItemSnapEdges(items, transitions, visibleTrackIds);
-
-    // Playhead
-    targets.push({ frame: Math.round(currentFrameRef.current), type: 'playhead' });
-
-    // Markers
-    const markers = useMarkersStore.getState().markers;
-    for (const marker of markers) {
-      targets.push({ frame: marker.frame, type: 'marker' });
-    }
-
-    return targets;
-  }, []);
-
   // Preview scrubber: show ghost playhead on hover
   const handleTimelineMouseDownCapture = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
@@ -556,7 +517,7 @@ export const TimelineContent = memo(function TimelineContent({
     }
   }, []);
 
-  const handleTimelineMouseMove = useCallback((_e: React.MouseEvent) => {
+  const handleTimelineMouseMove = useCallback(() => {
   }, []);
 
   const handleTimelineMouseLeave = useCallback(() => {

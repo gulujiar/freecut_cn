@@ -42,7 +42,6 @@ export function ClearKeyframesDialog() {
   };
 
   const itemCount = itemIds.length;
-  const itemText = itemCount === 1 ? 'clip' : 'clips';
   const propertyLabel = property ? PROPERTY_LABELS[property] : null;
 
   const title = property 
